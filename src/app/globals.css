@@ -1,26 +1,51 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
+  /* Light Theme - Japandi Editorial */
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-canvas: #f9f7f2;
+    --bg-surface: #efece6;
+    --bg-surface-elevated: #e4e0d7;
+    --text-primary: #1a1714;
+    --text-secondary: #6e675f;
+    --text-muted: #9a938a;
+    --accent-gold: #9e7b36;
+    --accent-gold-hover: #85662b;
+    --border-subtle: rgba(158, 123, 54, 0.22);
+    --border-glass: rgba(26, 23, 20, 0.08);
+    --card-bg: #efece6;
+    --card-border: rgba(26, 23, 20, 0.1);
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Dark Theme - Deep Luxury Editorial */
+  .dark {
+    --bg-canvas: #0f0e0d;
+    --bg-surface: #1a1917;
+    --bg-surface-elevated: #262420;
+    --text-primary: #f5f2eb;
+    --text-secondary: #a6a095;
+    --text-muted: #6b665e;
+    --accent-gold: #c5a059;
+    --accent-gold-hover: #d8b26b;
+    --border-subtle: rgba(197, 160, 89, 0.18);
+    --border-glass: rgba(255, 255, 255, 0.07);
+    --card-bg: #1a1917;
+    --card-border: rgba(255, 255, 255, 0.07);
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: "Plus Jakarta Sans", sans-serif;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-serif {
+    font-family: "Playfair Display", serif;
+  }
 }
