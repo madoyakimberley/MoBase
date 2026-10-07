@@ -1,19 +1,12 @@
-import dotenv from "dotenv";
-import path from "path";
-
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
-
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import * as schema from "./schema";
 
-const rawConnectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL;
 
-if (!rawConnectionString) {
+if (!connectionString) {
   throw new Error("DATABASE_URL is not defined in environment variables.");
 }
-
-const connectionString = rawConnectionString.split("?")[0];
 
 const globalForDb = globalThis as unknown as {
   conn: mysql.Pool | undefined;
@@ -22,15 +15,18 @@ const globalForDb = globalThis as unknown as {
 const poolConnection =
   globalForDb.conn ??
   mysql.createPool({
-    uri: connectionString,
-    ssl: {
-      rejectUnauthorized: true,
-    },
+    uri: connectionString, // Retain full connection string including parameters
     waitForConnections: true,
     connectionLimit: 10,
+    maxIdle: 10, // Maintain active idle connections in the pool
+    idleTimeout: 60000, // Evict dead idle connections after 60s
     queueLimit: 0,
     enableKeepAlive: true,
-    keepAliveInitialDelay: 0,
+    keepAliveInitialDelay: 10000, // Send TCP keep-alive probes after 10s of inactivity
+    connectTimeout: 10000, // Fail fast after 10s rather than hanging for 110s
+    ssl: {
+      rejectUnauthorized: process.env.NODE_ENV === "production", // Flexible SSL verification
+    },
   });
 
 if (process.env.NODE_ENV !== "production") {

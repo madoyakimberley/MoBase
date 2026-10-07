@@ -78,7 +78,8 @@ export const clients = mysqlTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     developerId: varchar("developer_id", { length: 36 }).notNull(),
     userId: varchar("user_id", { length: 36 }), // Connected Client Account
-    name: varchar("name", { length: 180 }).notNull(),
+    name: varchar("name", { length: 180 }).notNull(), // Client Contact Name
+    brandName: varchar("brand_name", { length: 180 }).notNull(), // Brand / Business Name
     slug: varchar("slug", { length: 64 }).notNull(),
     businessType: varchar("business_type", { length: 64 }).notNull(),
     customDomain: varchar("custom_domain", { length: 255 }),
@@ -98,7 +99,7 @@ export const projects = mysqlTable(
   "projects",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    searchCode: varchar("search_code", { length: 16 }).notNull(), // Unique search lookup code
+    searchCode: varchar("search_code", { length: 16 }).notNull(),
     clientId: varchar("client_id", { length: 36 }).notNull(),
     developerId: varchar("developer_id", { length: 36 }).notNull(),
     title: varchar("title", { length: 255 }).notNull(),

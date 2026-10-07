@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, clients, projects } from "@/db/schema";
+import { users, developers, clients, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -30,17 +30,21 @@ export async function POST(req: Request) {
       .toUpperCase()
       .trim();
 
-    if (!email || !password || !fullName || !companyName) {
+    if (!email || !password || !fullName) {
       return NextResponse.json(
-        {
-          message:
-            "Full name, company workspace name, email, and password are required.",
-        },
+        { message: "Full name, email, and password are required." },
         { status: 400 },
       );
     }
 
-    // 1. Check if email already registered
+    // 1. Determine role: strictly SUPER_ADMIN if email matches .env.local, otherwise DEVELOPER
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.toLowerCase().trim();
+    const role =
+      superAdminEmail && email === superAdminEmail
+        ? "SUPER_ADMIN"
+        : "DEVELOPER";
+
+    // 2. Check if user email already exists
     const existingUser = await db
       .select()
       .from(users)
@@ -54,7 +58,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Provision User
+    // 3. Provision User Account
     const userId = crypto.randomUUID();
     const passwordHash = await bcrypt.hash(password, 12);
 
@@ -63,19 +67,44 @@ export async function POST(req: Request) {
       email,
       passwordHash,
       fullName,
-      role: "CLIENT",
+      role,
       isActive: true,
-    } as any);
+    });
 
-    // 3. Provision Client Workspace
+    // 4. Provision Workspace
+    const developerId = crypto.randomUUID();
+    const workspaceSlug =
+      (companyName || fullName)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "") || `dev-${Date.now()}`;
+
+    await db.insert(developers).values({
+      id: developerId,
+      userId,
+      workspaceSlug,
+      companyName: companyName || fullName,
+    });
+
+    // 5. Provision Initial Client Record (including contact name & brandName)
     const clientId = crypto.randomUUID();
+    const clientSlug = (companyName || `${fullName}-client`)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
     await db.insert(clients).values({
       id: clientId,
+      developerId,
       userId,
-      companyName,
-    } as any);
+      name: fullName,
+      brandName: companyName || fullName,
+      slug: clientSlug || `client-${Date.now()}`,
+      businessType: "GENERAL",
+      whatsappNumber: "0000000000",
+    });
 
-    // 4. Provision Initial Project or Connect Existing Search Code
+    // 6. Provision Initial Project or Connect Existing Search Code
     let assignedProjectId: string | null = null;
 
     if (existingSearchCode) {
@@ -92,22 +121,26 @@ export async function POST(req: Request) {
 
     if (!assignedProjectId) {
       assignedProjectId = crypto.randomUUID();
-      const generatedCode = `MB-${Math.floor(1000 + Math.random() * 9000)}-LUX`;
+      const generatedCode = `JOB-${Math.floor(10000 + Math.random() * 90000)}`;
 
       await db.insert(projects).values({
         id: assignedProjectId,
-        clientId,
-        name: `${companyName} Digital Architecture`,
-        status: "IN_PROGRESS",
         searchCode: generatedCode,
-      } as any);
+        clientId,
+        developerId,
+        title: `${companyName || fullName} Digital Architecture`,
+        status: "IN_PROGRESS",
+        depositPaid: false,
+        totalPriceKes: 20000,
+      });
     }
 
-    // 5. Issue Redis Session
+    // 7. Issue Redis Session
     const sessionToken = crypto.randomBytes(32).toString("hex");
     const sessionData = JSON.stringify({
       userId,
-      role: "CLIENT",
+      developerId,
+      role,
       email,
       projectId: assignedProjectId,
     });
@@ -121,7 +154,8 @@ export async function POST(req: Request) {
 
     const res = NextResponse.json({
       success: true,
-      role: "CLIENT",
+      role,
+      developerId,
       projectId: assignedProjectId,
     });
 

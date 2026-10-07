@@ -44,7 +44,7 @@ export default function MoBaseHomepage() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-[var(--accent-gold)] font-bold">
-            Flat KES 20,000 Tier
+            Work with a fixed deposit amount
           </span>
           <span>Instant Deployment</span>
         </div>
