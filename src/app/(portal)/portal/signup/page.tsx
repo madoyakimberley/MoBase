@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -12,15 +12,15 @@ const SIGNUP_STEPS = [
     required: true,
   },
   {
-    key: "companyName",
-    label: "Brand / Company Workspace Name",
-    sublabel: "Name of your agency or project workspace",
-    required: true,
-  },
-  {
     key: "email",
     label: "Work Email",
     sublabel: "Registered workspace domain",
+    required: true,
+  },
+  {
+    key: "username",
+    label: "Choose Username",
+    sublabel: "Unique handle for system authentication",
     required: true,
   },
   {
@@ -28,12 +28,6 @@ const SIGNUP_STEPS = [
     label: "Password",
     sublabel: "Encrypted token access key with strict criteria",
     required: true,
-  },
-  {
-    key: "searchCode",
-    label: "Project ID",
-    sublabel: "Identifier Format: MB-XXXX (Optional)",
-    required: false,
   },
 ];
 
@@ -48,14 +42,52 @@ export default function SignupPage() {
 
   // Form states
   const [fullName, setFullName] = useState("");
-  const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [searchCode, setSearchCode] = useState("");
 
   const activeStep = SIGNUP_STEPS[currentStep];
   const isLastStep = currentStep === SIGNUP_STEPS.length - 1;
+
+  // Generate 2-3 dynamic username suggestions based on full name & email
+  const usernameSuggestions = useMemo(() => {
+    const cleanName = fullName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s]/g, "");
+    const parts = cleanName.split(/\s+/).filter(Boolean);
+    const emailPrefix =
+      email
+        .split("@")[0]
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]/g, "") || "";
+
+    const list: string[] = [];
+
+    if (parts.length >= 2) {
+      list.push(`${parts[0]}_${parts[parts.length - 1]}`);
+      list.push(`${parts[0]}.${parts[parts.length - 1]}`);
+    } else if (parts.length === 1) {
+      list.push(`${parts[0]}_dev`);
+      list.push(`${parts[0]}123`);
+    }
+
+    if (emailPrefix && !list.includes(emailPrefix)) {
+      list.push(emailPrefix);
+    }
+
+    while (list.length < 3) {
+      const base = parts[0] || emailPrefix || "user";
+      const rand = Math.floor(100 + Math.random() * 899);
+      const candidate = `${base}${rand}`;
+      if (!list.includes(candidate)) {
+        list.push(candidate);
+      }
+    }
+
+    return list.slice(0, 3);
+  }, [fullName, email]);
 
   // Password validation checks
   const isMinLength = password.length >= 8;
@@ -76,9 +108,10 @@ export default function SignupPage() {
   const isCurrentStepValid = () => {
     if (!activeStep.required) return true;
     if (activeStep.key === "fullName") return fullName.trim().length > 0;
-    if (activeStep.key === "companyName") return companyName.trim().length > 0;
     if (activeStep.key === "email")
       return email.trim().length > 0 && /^\S+@\S+\.\S+$/.test(email.trim());
+    if (activeStep.key === "username")
+      return /^[a-z0-9_.-]{3,30}$/i.test(username.trim());
     if (activeStep.key === "password") return isPasswordValid;
     return true;
   };
@@ -90,6 +123,10 @@ export default function SignupPage() {
     if (!isCurrentStepValid()) {
       if (activeStep.key === "email" && email.length > 0) {
         setError("Please enter a valid email address (e.g. user@domain.com).");
+      } else if (activeStep.key === "username") {
+        setError(
+          "Username must be 3–30 characters long and contain only letters, numbers, underscores, or dots.",
+        );
       } else if (activeStep.key === "password") {
         if (!isMinLength) {
           setError("Password must be at least 8 characters long.");
@@ -136,10 +173,9 @@ export default function SignupPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
+          username: username.toLowerCase().trim(),
           password,
           fullName,
-          companyName,
-          searchCode,
         }),
       });
 
@@ -207,7 +243,7 @@ export default function SignupPage() {
 
           <div className="text-center mb-6">
             <p className="text-[10px] font-mono tracking-[0.25em] text-[var(--accent-gold)] uppercase mb-2 font-medium">
-              WORKSPACE CREATION
+              ACCOUNT REGISTRATION
             </p>
             <h1 className="font-serif text-2xl sm:text-3xl text-[var(--text-primary)] font-normal tracking-tight mb-2">
               {activeStep.label}
@@ -217,7 +253,7 @@ export default function SignupPage() {
             </p>
           </div>
 
-          {/* Progress Bar & Dots */}
+          {/* Progress Bar */}
           <div className="mb-6 space-y-3">
             <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
               <span>
@@ -258,6 +294,7 @@ export default function SignupPage() {
           )}
 
           <form onSubmit={handleNext} className="space-y-6">
+            {/* Step 1: Full Name */}
             {activeStep.key === "fullName" && (
               <div className="space-y-1.5 animate-fadeIn">
                 <label className="block text-[11px] text-[var(--text-secondary)] font-medium">
@@ -275,23 +312,7 @@ export default function SignupPage() {
               </div>
             )}
 
-            {activeStep.key === "companyName" && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <label className="block text-[11px] text-[var(--text-secondary)] font-medium">
-                  Brand / Company Workspace Name
-                </label>
-                <input
-                  type="text"
-                  autoFocus
-                  required
-                  placeholder="e.g. Atelier Design Co."
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
-                />
-              </div>
-            )}
-
+            {/* Step 2: Work Email */}
             {activeStep.key === "email" && (
               <div className="space-y-1.5 animate-fadeIn">
                 <div className="flex justify-between items-center">
@@ -322,7 +343,7 @@ export default function SignupPage() {
                     type="email"
                     autoFocus
                     required
-                    placeholder="client@atelier-design.com"
+                    placeholder="client@domain.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
@@ -331,17 +352,62 @@ export default function SignupPage() {
               </div>
             )}
 
+            {/* Step 3: Username with 3 Suggestions */}
+            {activeStep.key === "username" && (
+              <div className="space-y-4 animate-fadeIn">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] text-[var(--text-secondary)] font-medium">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)] font-mono text-xs">
+                      @
+                    </span>
+                    <input
+                      type="text"
+                      autoFocus
+                      required
+                      placeholder="e.g. amani_odhiambo"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full pl-8 pr-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Suggested Usernames */}
+                <div className="p-3 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl space-y-2">
+                  <p className="text-[10px] text-[var(--text-muted)] font-mono uppercase tracking-wider">
+                    Suggested Usernames:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {usernameSuggestions.map((sug) => (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => setUsername(sug)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-mono border transition-all cursor-pointer ${
+                          username === sug
+                            ? "bg-[var(--accent-gold)] text-[var(--bg-canvas)] border-[var(--accent-gold)] font-medium"
+                            : "bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--accent-gold)]"
+                        }`}
+                      >
+                        @{sug}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Password */}
             {activeStep.key === "password" && (
               <div className="space-y-4 animate-fadeIn">
-                {/* Password Field */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <label className="text-[11px] text-[var(--text-secondary)] font-medium">
                       Password
                     </label>
-                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                      Encrypted Token
-                    </span>
                   </div>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
@@ -373,123 +439,28 @@ export default function SignupPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
                     >
-                      {showPassword ? (
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a8.962 8.962 0 012.122-.363c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21M3 3l18 18"
-                          />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
-                      )}
+                      {showPassword ? "Hide" : "Show"}
                     </button>
                   </div>
                 </div>
 
-                {/* Confirm Password Field */}
                 <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] text-[var(--text-secondary)] font-medium">
-                      Confirm Password
-                    </label>
-                  </div>
+                  <label className="text-[11px] text-[var(--text-secondary)] font-medium">
+                    Confirm Password
+                  </label>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                        />
-                      </svg>
-                    </span>
                     <input
                       type={showConfirmPassword ? "text" : "password"}
                       required
                       placeholder="••••••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full pl-10 pr-10 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors font-mono"
+                      className="w-full px-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors font-mono"
                     />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-                    >
-                      {showConfirmPassword ? (
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a8.962 8.962 0 012.122-.363c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21M3 3l18 18"
-                          />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
-                      )}
-                    </button>
                   </div>
                 </div>
 
-                {/* Live Password Criteria Checklist */}
+                {/* Password Criteria */}
                 <div className="p-3 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl space-y-1.5 text-[11px]">
                   <p className="text-[var(--text-secondary)] font-medium mb-1 font-mono text-[10px]">
                     REQUIREMENTS:
@@ -502,7 +473,7 @@ export default function SignupPage() {
                           : "text-[var(--text-muted)]"
                       }
                     >
-                      {isMinLength ? "✓" : "•"} Min. 8 characters
+                      {isMinLength ? "✓" : "•"} Min. 8 chars
                     </span>
                     <span
                       className={
@@ -511,7 +482,7 @@ export default function SignupPage() {
                           : "text-[var(--text-muted)]"
                       }
                     >
-                      {hasUpper ? "✓" : "•"} Uppercase letter
+                      {hasUpper ? "✓" : "•"} Uppercase
                     </span>
                     <span
                       className={
@@ -520,7 +491,7 @@ export default function SignupPage() {
                           : "text-[var(--text-muted)]"
                       }
                     >
-                      {hasLower ? "✓" : "•"} Lowercase letter
+                      {hasLower ? "✓" : "•"} Lowercase
                     </span>
                     <span
                       className={
@@ -538,7 +509,7 @@ export default function SignupPage() {
                           : "text-[var(--text-muted)]"
                       }
                     >
-                      {hasSpecial ? "✓" : "•"} Special symbol
+                      {hasSpecial ? "✓" : "•"} Symbol
                     </span>
                     <span
                       className={
@@ -550,47 +521,6 @@ export default function SignupPage() {
                       {isMatching ? "✓" : "•"} Passwords match
                     </span>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {activeStep.key === "searchCode" && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <div className="flex justify-between items-center">
-                  <label className="text-[11px] text-[var(--text-secondary)] font-medium">
-                    Project ID{" "}
-                    <span className="text-[var(--text-muted)] font-normal">
-                      (Optional)
-                    </span>
-                  </label>
-                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                    Identifier: MB-XXXX
-                  </span>
-                </div>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                      />
-                    </svg>
-                  </span>
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="MB-9421-LUX"
-                    value={searchCode}
-                    onChange={(e) => setSearchCode(e.target.value)}
-                    className="w-full pl-10 pr-10 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] uppercase font-mono tracking-wider focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
-                  />
                 </div>
               </div>
             )}
@@ -628,26 +558,11 @@ export default function SignupPage() {
               >
                 <span>
                   {loading
-                    ? "CREATING WORKSPACE..."
+                    ? "CREATING ACCOUNT..."
                     : isLastStep
-                      ? "ESTABLISH WORKSPACE"
+                      ? "CREATE ACCOUNT"
                       : "CONTINUE"}
                 </span>
-                {!loading && (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M14 5l7 7m0 0l-7 7m7-7H3"
-                    />
-                  </svg>
-                )}
               </button>
             </div>
 
@@ -662,134 +577,12 @@ export default function SignupPage() {
           </form>
 
           <div className="mt-8 pt-6 border-t border-[var(--border-glass)] flex items-center justify-center gap-2 text-[11px] text-[var(--text-muted)] font-mono">
-            <svg
-              className="w-3.5 h-3.5 text-[var(--accent-gold)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-              />
-            </svg>
             <span>256-Bit Encrypted Session</span>
             <span>•</span>
             <span>ISO 27001 Certified</span>
           </div>
         </div>
       </main>
-
-      {/* Footer Features */}
-      <footer className="w-full max-w-7xl mx-auto space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-glass)] rounded-2xl p-5 flex items-start gap-4">
-            <div className="w-8 h-8 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0 text-[var(--accent-gold)]">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-serif text-sm font-medium text-[var(--text-primary)] mb-1">
-                Real-time Milestones
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] leading-relaxed font-light">
-                Track architectural stages, sprint throughput, and bespoke
-                artisan handoffs live.
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-glass)] rounded-2xl p-5 flex items-start gap-4">
-            <div className="w-8 h-8 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0 text-[var(--accent-gold)]">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-serif text-sm font-medium text-[var(--text-primary)] mb-1">
-                Asset Approvals
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] leading-relaxed font-light">
-                Review 3D architectural renders, typography proofs, and physical
-                materials.
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-glass)] rounded-2xl p-5 flex items-start gap-4">
-            <div className="w-8 h-8 rounded-lg bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] flex items-center justify-center shrink-0 text-[var(--accent-gold)]">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-serif text-sm font-medium text-[var(--text-primary)] mb-1">
-                Single Sign-On SSO
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] leading-relaxed font-light">
-                Enterprise Okta and Azure AD directory hooks pre-configured per
-                corporate workspace.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center justify-between text-[11px] text-[var(--text-muted)] font-mono border-t border-[var(--border-glass)] pt-6 gap-4">
-          <div>
-            Powered by{" "}
-            <strong className="text-[var(--text-secondary)] font-medium">
-              MoBase
-            </strong>{" "}
-            Architectural Systems
-          </div>
-          <div className="flex items-center gap-4">
-            <span>SOC-2 Certified</span>
-            <span>|</span>
-            <span>ISO 27001</span>
-            <span>|</span>
-            <span>Privacy Shield</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

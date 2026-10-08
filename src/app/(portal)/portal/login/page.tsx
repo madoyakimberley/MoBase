@@ -6,9 +6,9 @@ import Link from "next/link";
 
 const LOGIN_STEPS = [
   {
-    key: "email",
-    label: "Work Email",
-    sublabel: "Registered enterprise domain",
+    key: "identifier",
+    label: "Email or Username",
+    sublabel: "Registered workspace email or unique handle",
     required: true,
   },
   {
@@ -34,7 +34,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   // Form states
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [searchCode, setSearchCode] = useState("");
 
@@ -43,8 +43,7 @@ export default function LoginPage() {
 
   const isCurrentStepValid = () => {
     if (!activeStep.required) return true;
-    if (activeStep.key === "email")
-      return email.trim().length > 0 && /^\S+@\S+\.\S+$/.test(email.trim());
+    if (activeStep.key === "identifier") return identifier.trim().length >= 3;
     if (activeStep.key === "password") return password.length >= 8;
     return true;
   };
@@ -54,8 +53,8 @@ export default function LoginPage() {
     setError(null);
 
     if (!isCurrentStepValid()) {
-      if (activeStep.key === "email" && email.length > 0) {
-        setError("Please enter a valid email address (e.g. user@domain.com).");
+      if (activeStep.key === "identifier") {
+        setError("Please enter a valid email address or username.");
       } else if (activeStep.key === "password" && password.length < 8) {
         setError("Password must be at least 8 characters in length.");
       } else {
@@ -89,7 +88,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
+          identifier: identifier.toLowerCase().trim(),
           password,
           searchCode,
           rememberWorkstation,
@@ -211,14 +210,14 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleNext} className="space-y-6">
-            {activeStep.key === "email" && (
+            {activeStep.key === "identifier" && (
               <div className="space-y-1.5 animate-fadeIn">
                 <div className="flex justify-between items-center">
                   <label className="text-[11px] text-[var(--text-secondary)] font-medium">
-                    Work Email
+                    Work Email or Username
                   </label>
                   <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                    Registered Domain
+                    Identity Handle
                   </span>
                 </div>
                 <div className="relative">
@@ -233,17 +232,17 @@ export default function LoginPage() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={1.5}
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                       />
                     </svg>
                   </span>
                   <input
-                    type="email"
+                    type="text"
                     autoFocus
                     required
-                    placeholder="client@atelier-design.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="user@domain.com or @username"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full pl-10 pr-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
                   />
                 </div>
@@ -380,7 +379,7 @@ export default function LoginPage() {
                     onChange={(e) => setRememberWorkstation(e.target.checked)}
                     className="rounded border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--accent-gold)] focus:ring-0 focus:ring-offset-0"
                   />
-                  <span>Remember workstation token</span>
+                  <span>Remember workstation token (30 Days)</span>
                 </label>
               </div>
             )}
@@ -406,7 +405,7 @@ export default function LoginPage() {
                   {loading
                     ? "AUTHENTICATING..."
                     : isLastStep
-                      ? "ACCESS PROJECT TRACKER"
+                      ? "ACCESS PORTAL"
                       : "CONTINUE"}
                 </span>
                 {!loading && (
@@ -438,19 +437,6 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-8 pt-6 border-t border-[var(--border-glass)] flex items-center justify-center gap-2 text-[11px] text-[var(--text-muted)] font-mono">
-            <svg
-              className="w-3.5 h-3.5 text-[var(--accent-gold)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-              />
-            </svg>
             <span>256-Bit Encrypted Session</span>
             <span>•</span>
             <span>ISO 27001 Certified</span>

@@ -40,6 +40,7 @@ export const users = mysqlTable(
   {
     id: varchar("id", { length: 36 }).primaryKey(),
     email: varchar("email", { length: 255 }).notNull(),
+    username: varchar("username", { length: 64 }).notNull(),
     passwordHash: text("password_hash").notNull(),
     fullName: varchar("full_name", { length: 180 }).notNull(),
     role: roleEnum.default("DEVELOPER").notNull(),
@@ -50,6 +51,7 @@ export const users = mysqlTable(
   },
   (table) => ({
     emailIdx: uniqueIndex("idx_users_email").on(table.email),
+    usernameIdx: uniqueIndex("idx_users_username").on(table.username),
     roleIdx: index("idx_users_role").on(table.role),
   }),
 );

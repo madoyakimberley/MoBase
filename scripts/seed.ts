@@ -12,6 +12,7 @@ async function seed() {
   const email = process.env.SUPER_ADMIN;
   const password = process.env.SUPER_ADMIN_PASSWORD;
   const fullName = process.env.SUPER_ADMIN_USERNAME || "Super Admin";
+  const username = "Head Of Mobase";
 
   if (!email || !password) {
     console.error(
@@ -40,6 +41,7 @@ async function seed() {
     await db.insert(users).values({
       id: userId,
       email: email.toLowerCase().trim(),
+      username,
       passwordHash,
       fullName,
       role: "SUPER_ADMIN",

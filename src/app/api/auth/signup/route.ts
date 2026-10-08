@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, developers, clients, projects } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { enforceRateLimit, redis } from "@/lib/redis";
@@ -23,37 +23,52 @@ export async function POST(req: Request) {
     const email = sanitizeInput(body.email || "")
       .toLowerCase()
       .trim();
+    const username = sanitizeInput(body.username || "")
+      .toLowerCase()
+      .trim();
     const password = (body.password || "").trim();
     const fullName = sanitizeInput(body.fullName || "").trim();
-    const companyName = sanitizeInput(body.companyName || "").trim();
-    const existingSearchCode = sanitizeInput(body.searchCode || "")
-      .toUpperCase()
-      .trim();
 
-    if (!email || !password || !fullName) {
+    if (!email || !username || !password || !fullName) {
       return NextResponse.json(
-        { message: "Full name, email, and password are required." },
+        { message: "Full name, username, email, and password are required." },
         { status: 400 },
       );
     }
 
-    // 1. Determine role: strictly SUPER_ADMIN if email matches .env.local, otherwise DEVELOPER
+    if (!/^[a-z0-9_.-]{3,30}$/.test(username)) {
+      return NextResponse.json(
+        {
+          message:
+            "Username must be 3-30 characters long and contain only letters, numbers, underscores, or dots.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // 1. Determine role: SUPER_ADMIN if email matches .env.local, otherwise DEVELOPER
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.toLowerCase().trim();
     const role =
       superAdminEmail && email === superAdminEmail
         ? "SUPER_ADMIN"
         : "DEVELOPER";
 
-    // 2. Check if user email already exists
+    // 2. Check if email or username already exists
     const existingUser = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(or(eq(users.email, email), eq(users.username, username)))
       .limit(1);
 
     if (existingUser.length > 0) {
+      if (existingUser[0].email === email) {
+        return NextResponse.json(
+          { message: "An account with this email address already exists." },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
-        { message: "An account with this email address already exists." },
+        { message: "This username is already taken. Please choose another." },
         { status: 409 },
       );
     }
@@ -65,6 +80,7 @@ export async function POST(req: Request) {
     await db.insert(users).values({
       id: userId,
       email,
+      username,
       passwordHash,
       fullName,
       role,
@@ -74,74 +90,58 @@ export async function POST(req: Request) {
     // 4. Provision Workspace
     const developerId = crypto.randomUUID();
     const workspaceSlug =
-      (companyName || fullName)
+      username ||
+      fullName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "") || `dev-${Date.now()}`;
+        .replace(/(^-|-$)/g, "") ||
+      `dev-${Date.now()}`;
 
     await db.insert(developers).values({
       id: developerId,
       userId,
       workspaceSlug,
-      companyName: companyName || fullName,
+      companyName: fullName,
     });
 
-    // 5. Provision Initial Client Record (including contact name & brandName)
+    // 5. Provision Initial Client Record
     const clientId = crypto.randomUUID();
-    const clientSlug = (companyName || `${fullName}-client`)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
+    const clientSlug = `${username}-client`;
 
     await db.insert(clients).values({
       id: clientId,
       developerId,
       userId,
       name: fullName,
-      brandName: companyName || fullName,
-      slug: clientSlug || `client-${Date.now()}`,
+      brandName: fullName,
+      slug: clientSlug,
       businessType: "GENERAL",
       whatsappNumber: "0000000000",
     });
 
-    // 6. Provision Initial Project or Connect Existing Search Code
-    let assignedProjectId: string | null = null;
+    // 6. Provision Initial Project
+    const assignedProjectId = crypto.randomUUID();
+    const generatedCode = `JOB-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    if (existingSearchCode) {
-      const existingProj = await db
-        .select()
-        .from(projects)
-        .where(eq(projects.searchCode, existingSearchCode))
-        .limit(1);
+    await db.insert(projects).values({
+      id: assignedProjectId,
+      searchCode: generatedCode,
+      clientId,
+      developerId,
+      title: `${fullName} Digital Architecture`,
+      status: "IN_PROGRESS",
+      depositPaid: false,
+      totalPriceKes: 20000,
+    });
 
-      if (existingProj.length > 0) {
-        assignedProjectId = existingProj[0].id;
-      }
-    }
-
-    if (!assignedProjectId) {
-      assignedProjectId = crypto.randomUUID();
-      const generatedCode = `JOB-${Math.floor(10000 + Math.random() * 90000)}`;
-
-      await db.insert(projects).values({
-        id: assignedProjectId,
-        searchCode: generatedCode,
-        clientId,
-        developerId,
-        title: `${companyName || fullName} Digital Architecture`,
-        status: "IN_PROGRESS",
-        depositPaid: false,
-        totalPriceKes: 20000,
-      });
-    }
-
-    // 7. Issue Redis Session
+    // 7. Issue Session Token
     const sessionToken = crypto.randomBytes(32).toString("hex");
     const sessionData = JSON.stringify({
       userId,
       developerId,
       role,
       email,
+      username,
       projectId: assignedProjectId,
     });
 

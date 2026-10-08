@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, clients, projects } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { users, projects } from "@/db/schema";
+import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { enforceRateLimit, redis } from "@/lib/redis";
@@ -24,21 +24,25 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const email = sanitizeInput(body.email || "").toLowerCase();
+    const identifier = sanitizeInput(body.identifier || body.email || "")
+      .toLowerCase()
+      .trim();
     const password = (body.password || "").trim();
     const searchCode = sanitizeInput(body.searchCode || "").toUpperCase();
+    const rememberWorkstation = Boolean(body.rememberWorkstation);
 
-    if (!email || !password) {
+    if (!identifier || !password) {
       return NextResponse.json(
-        { message: "Email and password are required." },
+        { message: "Email/Username and password are required." },
         { status: 400 },
       );
     }
 
+    // 1. Search database for user matching EITHER email OR username
     const matchedUsers = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(or(eq(users.email, identifier), eq(users.username, identifier)))
       .limit(1);
 
     if (matchedUsers.length === 0) {
@@ -58,12 +62,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Strict Role Evaluation: SUPER_ADMIN if email matches .env.local, DEVELOPER otherwise
+    // 2. Strict Role Evaluation: SUPER_ADMIN if email matches .env.local
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.toLowerCase().trim();
     const effectiveRole =
-      superAdminEmail && email === superAdminEmail
+      superAdminEmail && user.email === superAdminEmail
         ? "SUPER_ADMIN"
-        : "DEVELOPER";
+        : user.role;
 
     if (user.role !== effectiveRole) {
       await db
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
         .where(eq(users.id, user.id));
     }
 
-    // 2. Resolve Project Context
+    // 3. Resolve Project Context
     let projectId: string | null = null;
 
     if (searchCode) {
@@ -85,22 +89,23 @@ export async function POST(req: Request) {
       if (proj.length > 0) projectId = proj[0].id;
     }
 
-    // 3. Issue Session Token
+    // 4. Determine Session Lifetime (30 Days if Remembered, 1 Day if Standard)
+    const sessionTTL = rememberWorkstation
+      ? 60 * 60 * 24 * 30
+      : 60 * 60 * 24 * 1;
+
+    // 5. Issue Session Token
     const sessionToken = crypto.randomBytes(32).toString("hex");
     const sessionData = JSON.stringify({
       userId: user.id,
       role: effectiveRole,
       email: user.email,
+      username: user.username,
       projectId,
     });
 
     try {
-      await redis.set(
-        `session:${sessionToken}`,
-        sessionData,
-        "EX",
-        60 * 60 * 24 * 7,
-      );
+      await redis.set(`session:${sessionToken}`, sessionData, "EX", sessionTTL);
     } catch (redisErr) {
       console.error("Failed to write session to Redis:", redisErr);
       return NextResponse.json(
@@ -119,7 +124,7 @@ export async function POST(req: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: sessionTTL,
       path: "/",
     });
 
