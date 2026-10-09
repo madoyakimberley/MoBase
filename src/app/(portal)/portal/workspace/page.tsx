@@ -37,6 +37,65 @@ interface Overview {
 const kes = (v: number) => `KES ${v.toLocaleString("en-KE")}`;
 const label = (s: string) => s.replace(/_/g, " ").toLowerCase();
 
+function OverviewSkeleton() {
+  return (
+    <div className="space-y-8 animate-pulse">
+      {/* Header Skeleton */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[var(--border-glass)] pb-6">
+        <div className="space-y-2">
+          <div className="h-8 w-48 bg-[var(--bg-surface-elevated)] rounded-xl" />
+          <div className="h-4 w-72 bg-[var(--bg-surface-elevated)] rounded-md" />
+        </div>
+        <div className="h-10 w-32 bg-[var(--bg-surface-elevated)] rounded-xl" />
+      </div>
+
+      {/* Money Cards Skeleton */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3"
+          >
+            <div className="h-3 w-16 bg-[var(--bg-surface-elevated)] rounded" />
+            <div className="h-8 w-36 bg-[var(--bg-surface-elevated)] rounded-lg" />
+            <div className="h-3 w-24 bg-[var(--bg-surface-elevated)] rounded" />
+          </div>
+        ))}
+      </section>
+
+      {/* Action Items Skeleton */}
+      <section className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
+        <div className="h-6 w-36 bg-[var(--bg-surface-elevated)] rounded-md" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="p-4 rounded-xl bg-[var(--bg-surface-elevated)] h-20 space-y-2"
+            >
+              <div className="h-6 w-10 bg-[var(--bg-surface)] rounded" />
+              <div className="h-3 w-32 bg-[var(--bg-surface)] rounded" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Grid Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 h-64 space-y-4">
+          <div className="h-6 w-32 bg-[var(--bg-surface-elevated)] rounded" />
+          <div className="h-16 w-full bg-[var(--bg-surface-elevated)] rounded-xl" />
+          <div className="h-16 w-full bg-[var(--bg-surface-elevated)] rounded-xl" />
+        </div>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 h-64 space-y-4">
+          <div className="h-6 w-28 bg-[var(--bg-surface-elevated)] rounded" />
+          <div className="h-16 w-full bg-[var(--bg-surface-elevated)] rounded-xl" />
+          <div className="h-16 w-full bg-[var(--bg-surface-elevated)] rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OverviewPage() {
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,11 +121,7 @@ export default function OverviewPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="w-full py-24 flex justify-center">
-        <div className="w-8 h-8 border-2 border-[var(--accent-gold)] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <OverviewSkeleton />;
   }
 
   if (error || !data) {
@@ -86,6 +141,7 @@ export default function OverviewPage() {
   }
 
   const { money, actions, counts } = data;
+  const isFreshWorkspace = counts.active === 0 && counts.prospects === 0;
 
   const moneyCards = [
     {
@@ -136,11 +192,64 @@ export default function OverviewPage() {
         </div>
         <Link
           href={`${BASE}/find-jobs`}
-          className="px-4 py-2.5 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] text-xs font-mono font-medium rounded-xl transition-colors"
+          className="px-4 py-2.5 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] text-xs font-mono font-medium rounded-xl transition-colors flex items-center gap-2 justify-center"
         >
-          Find jobs
+          <span>Find jobs</span>
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M14 5l7 7m0 0l-7 7m7-7H3"
+            />
+          </svg>
         </Link>
       </div>
+
+      {/* Fresh Workspace Hero Card */}
+      {isFreshWorkspace && (
+        <section className="bg-[var(--bg-surface)] border border-[var(--accent-gold)]/30 rounded-3xl p-8 relative overflow-hidden shadow-xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent-gold)] opacity-5 blur-3xl pointer-events-none" />
+          <div className="max-w-xl space-y-4 relative z-10">
+            <span className="text-[10px] font-mono tracking-widest text-[var(--accent-gold)] uppercase font-semibold">
+              // READY TO BUILD
+            </span>
+            <h2 className="font-serif text-2xl sm:text-3xl font-normal">
+              Your workspace is ready. Secure your first job.
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Browse available architecture jobs, claim verified listings, and
+              start earning directly inside your MoBase developer terminal.
+            </p>
+            <div className="pt-2">
+              <Link
+                href={`${BASE}/find-jobs`}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--accent-gold)] text-[var(--bg-canvas)] text-xs font-mono font-medium rounded-xl hover:bg-[var(--accent-gold-hover)] transition-colors shadow-md"
+              >
+                <span>EXPLORE AVAILABLE JOBS</span>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 8l4 4m0 0l-4 4m4-4H3"
+                  />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {moneyCards.map((c) => (
@@ -198,9 +307,17 @@ export default function OverviewPage() {
           </div>
 
           {data.activeBuilds.length === 0 ? (
-            <p className="py-10 text-center text-xs text-[var(--text-muted)]">
-              No builds in progress yet.
-            </p>
+            <div className="py-12 text-center space-y-3">
+              <p className="text-xs text-[var(--text-muted)]">
+                No active builds in your workspace right now.
+              </p>
+              <Link
+                href={`${BASE}/find-jobs`}
+                className="inline-block text-xs font-mono text-[var(--accent-gold)] hover:underline"
+              >
+                + Find a job to start building
+              </Link>
+            </div>
           ) : (
             <div className="space-y-3">
               {data.activeBuilds.map((b) => (

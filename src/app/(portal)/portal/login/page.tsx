@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -17,18 +17,26 @@ const LOGIN_STEPS = [
     sublabel: "Encrypted token key",
     required: true,
   },
-  {
-    key: "searchCode",
-    label: "Project ID",
-    sublabel: "Identifier Format: MB-XXXX (Optional)",
-    required: false,
-  },
+];
+
+const REDIRECT_PHRASES = [
+  "Initializing secure handshake...",
+  "Decrypting workspace session keys...",
+  "Allocating developer environment...",
+  "Verifying token signatures...",
+  "Establishing high-speed channel...",
+  "Configuring workspace cache...",
+  "Finalizing security clearance...",
+  "Redirecting to portal...",
 ];
 
 export default function LoginPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [redirectProgress, setRedirectProgress] = useState(0);
+  const [statusPhrase, setStatusPhrase] = useState(REDIRECT_PHRASES[0]);
   const [error, setError] = useState<string | null>(null);
   const [rememberWorkstation, setRememberWorkstation] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -36,7 +44,6 @@ export default function LoginPage() {
   // Form states
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [searchCode, setSearchCode] = useState("");
 
   const activeStep = LOGIN_STEPS[currentStep];
   const isLastStep = currentStep === LOGIN_STEPS.length - 1;
@@ -90,7 +97,6 @@ export default function LoginPage() {
         body: JSON.stringify({
           identifier: identifier.toLowerCase().trim(),
           password,
-          searchCode,
           rememberWorkstation,
         }),
       });
@@ -101,17 +107,33 @@ export default function LoginPage() {
         throw new Error(data.message || "Authentication failed.");
       }
 
-      if (data.role === "SUPER_ADMIN") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push(
-          `/portal/workspace${data.projectId ? `?project=${data.projectId}` : ""}`,
-        );
-      }
-      router.refresh();
+      // Successful auth -> Start redirect sequence
+      setLoading(false);
+      setIsRedirecting(true);
+
+      const destination =
+        data.role === "SUPER_ADMIN" ? "/admin/dashboard" : "/portal/workspace";
+
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.floor(Math.random() * 18) + 12;
+
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+          setTimeout(() => {
+            router.push(destination);
+            router.refresh();
+          }, 300);
+        }
+
+        setRedirectProgress(progress);
+        const nextPhrase =
+          REDIRECT_PHRASES[Math.floor(Math.random() * REDIRECT_PHRASES.length)];
+        setStatusPhrase(nextPhrase);
+      }, 200);
     } catch (err: any) {
       setError(err.message || "An error occurred during authentication.");
-    } finally {
       setLoading(false);
     }
   };
@@ -148,7 +170,7 @@ export default function LoginPage() {
         </div>
       </header>
 
-      {/* Main Form */}
+      {/* Main Container */}
       <main className="w-full max-w-lg mx-auto my-12 relative">
         <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-[var(--accent-gold)] opacity-5 blur-3xl pointer-events-none" />
@@ -157,139 +179,251 @@ export default function LoginPage() {
             M
           </div>
 
-          <div className="text-center mb-6">
-            <p className="text-[10px] font-mono tracking-[0.25em] text-[var(--accent-gold)] uppercase mb-2 font-medium">
-              PORTAL AUTHENTICATION
-            </p>
-            <h1 className="font-serif text-2xl sm:text-3xl text-[var(--text-primary)] font-normal tracking-tight mb-2">
-              {activeStep.label}
-            </h1>
-            <p className="text-xs text-[var(--text-secondary)] font-light max-w-xs mx-auto leading-relaxed">
-              {activeStep.sublabel}
-            </p>
-          </div>
+          {isRedirecting ? (
+            /* Redirecting Screen with Progress Bar & Random Phrases */
+            <div className="text-center py-6 space-y-6 animate-fadeIn">
+              <div>
+                <p className="text-[10px] font-mono tracking-[0.25em] text-[var(--accent-gold)] uppercase mb-2 font-medium">
+                  AUTHENTICATION SUCCESSFUL
+                </p>
+                <h1 className="font-serif text-2xl sm:text-3xl text-[var(--text-primary)] font-normal tracking-tight mb-2">
+                  Redirecting...
+                </h1>
+                <p className="text-xs font-mono text-[var(--text-secondary)] min-h-[1.25rem]">
+                  {statusPhrase}
+                </p>
+              </div>
 
-          {/* Progress Bar & Dots */}
-          <div className="mb-6 space-y-3">
-            <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-              <span>
-                STEP 0{currentStep + 1} OF 0{LOGIN_STEPS.length}
-              </span>
-              <span>{activeStep.label}</span>
-            </div>
-
-            <div className="w-full h-1 bg-[var(--bg-canvas)] rounded-full overflow-hidden border border-[var(--border-glass)]">
-              <div
-                className="h-full bg-[var(--accent-gold)] transition-all duration-300 ease-out"
-                style={{
-                  width: `${((currentStep + 1) / LOGIN_STEPS.length) * 100}%`,
-                }}
-              />
-            </div>
-
-            <div className="flex justify-center gap-1.5 pt-1">
-              {LOGIN_STEPS.map((s, idx) => (
-                <div
-                  key={s.key}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    currentStep === idx
-                      ? "w-6 bg-[var(--accent-gold)]"
-                      : idx < currentStep
-                        ? "w-1.5 bg-[var(--accent-gold)] opacity-50"
-                        : "w-1.5 bg-[var(--border-subtle)]"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-6 p-3 bg-[var(--bg-surface-elevated)] border border-red-500/30 text-red-400 text-xs rounded-xl text-center font-mono">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleNext} className="space-y-6">
-            {activeStep.key === "identifier" && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <div className="flex justify-between items-center">
-                  <label className="text-[11px] text-[var(--text-secondary)] font-medium">
-                    Work Email or Username
-                  </label>
-                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                    Identity Handle
-                  </span>
-                </div>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                  </span>
-                  <input
-                    type="text"
-                    autoFocus
-                    required
-                    placeholder="user@domain.com or @username"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className="w-full h-2 bg-[var(--bg-canvas)] rounded-full overflow-hidden border border-[var(--border-glass)]">
+                  <div
+                    className="h-full bg-[var(--accent-gold)] transition-all duration-200 ease-out"
+                    style={{ width: `${redirectProgress}%` }}
                   />
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-muted)] uppercase">
+                  <span>TRANSFERRING SESSION</span>
+                  <span>{redirectProgress}%</span>
                 </div>
               </div>
-            )}
+            </div>
+          ) : (
+            /* Standard Auth Form */
+            <>
+              <div className="text-center mb-6">
+                <p className="text-[10px] font-mono tracking-[0.25em] text-[var(--accent-gold)] uppercase mb-2 font-medium">
+                  PORTAL AUTHENTICATION
+                </p>
+                <h1 className="font-serif text-2xl sm:text-3xl text-[var(--text-primary)] font-normal tracking-tight mb-2">
+                  {activeStep.label}
+                </h1>
+                <p className="text-xs text-[var(--text-secondary)] font-light max-w-xs mx-auto leading-relaxed">
+                  {activeStep.sublabel}
+                </p>
+              </div>
 
-            {activeStep.key === "password" && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <div className="flex justify-between items-center">
-                  <label className="text-[11px] text-[var(--text-secondary)] font-medium">
-                    Password
-                  </label>
-                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                    Encrypted Token
+              {/* Step Progress Bar */}
+              <div className="mb-6 space-y-3">
+                <div className="flex justify-between items-center text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                  <span>
+                    STEP 0{currentStep + 1} OF 0{LOGIN_STEPS.length}
                   </span>
+                  <span>{activeStep.label}</span>
                 </div>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                      />
-                    </svg>
-                  </span>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    autoFocus
-                    required
-                    placeholder="••••••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors font-mono"
+
+                <div className="w-full h-1 bg-[var(--bg-canvas)] rounded-full overflow-hidden border border-[var(--border-glass)]">
+                  <div
+                    className="h-full bg-[var(--accent-gold)] transition-all duration-300 ease-out"
+                    style={{
+                      width: `${((currentStep + 1) / LOGIN_STEPS.length) * 100}%`,
+                    }}
                   />
+                </div>
+
+                <div className="flex justify-center gap-1.5 pt-1">
+                  {LOGIN_STEPS.map((s, idx) => (
+                    <div
+                      key={s.key}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        currentStep === idx
+                          ? "w-6 bg-[var(--accent-gold)]"
+                          : idx < currentStep
+                            ? "w-1.5 bg-[var(--accent-gold)] opacity-50"
+                            : "w-1.5 bg-[var(--border-subtle)]"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {error && (
+                <div className="mb-6 p-3 bg-[var(--bg-surface-elevated)] border border-red-500/30 text-red-400 text-xs rounded-xl text-center font-mono">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleNext} className="space-y-6">
+                {activeStep.key === "identifier" && (
+                  <div className="space-y-1.5 animate-fadeIn">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[11px] text-[var(--text-secondary)] font-medium">
+                        Work Email or Username
+                      </label>
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        Identity Handle
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                          />
+                        </svg>
+                      </span>
+                      <input
+                        type="text"
+                        autoFocus
+                        required
+                        placeholder="user@domain.com or @username"
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {activeStep.key === "password" && (
+                  <div className="space-y-1.5 animate-fadeIn">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[11px] text-[var(--text-secondary)] font-medium">
+                        Password
+                      </label>
+                      <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                        Encrypted Token
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                          />
+                        </svg>
+                      </span>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        autoFocus
+                        required
+                        placeholder="••••••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full pl-10 pr-10 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-gold)] transition-colors font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      >
+                        {showPassword ? (
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a8.962 8.962 0 012.122-.363c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21M3 3l18 18"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isLastStep && (
+                  <div className="flex items-center gap-2 pt-1 animate-fadeIn">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={rememberWorkstation}
+                        onChange={(e) =>
+                          setRememberWorkstation(e.target.checked)
+                        }
+                        className="rounded border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--accent-gold)] focus:ring-0 focus:ring-offset-0"
+                      />
+                      <span>Remember workstation token (30 Days)</span>
+                    </label>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  {currentStep > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleBack}
+                      disabled={loading}
+                      className="px-4 py-3.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono rounded-xl transition-colors cursor-pointer"
+                    >
+                      BACK
+                    </button>
+                  )}
+
                   <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-mono font-medium tracking-wider uppercase text-xs rounded-xl py-3.5 px-4 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
                   >
-                    {showPassword ? (
+                    <span>
+                      {loading
+                        ? "AUTHENTICATING..."
+                        : isLastStep
+                          ? "ACCESS PORTAL"
+                          : "CONTINUE"}
+                    </span>
+                    {!loading && (
                       <svg
                         className="w-4 h-4"
                         fill="none"
@@ -299,142 +433,25 @@ export default function LoginPage() {
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a8.962 8.962 0 012.122-.363c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21M3 3l18 18"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                          strokeWidth={2}
+                          d="M14 5l7 7m0 0l-7 7m7-7H3"
                         />
                       </svg>
                     )}
                   </button>
                 </div>
-              </div>
-            )}
 
-            {activeStep.key === "searchCode" && (
-              <div className="space-y-1.5 animate-fadeIn">
-                <div className="flex justify-between items-center">
-                  <label className="text-[11px] text-[var(--text-secondary)] font-medium">
-                    Project ID{" "}
-                    <span className="text-[var(--text-muted)] font-normal">
-                      (Optional)
-                    </span>
-                  </label>
-                  <span className="text-[10px] text-[var(--text-muted)] font-mono">
-                    Identifier: MB-XXXX
-                  </span>
-                </div>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[var(--text-muted)]">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                      />
-                    </svg>
-                  </span>
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="MB-9421-LUX"
-                    value={searchCode}
-                    onChange={(e) => setSearchCode(e.target.value)}
-                    className="w-full pl-10 pr-10 py-3.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] uppercase font-mono tracking-wider focus:outline-none focus:border-[var(--accent-gold)] transition-colors"
-                  />
-                </div>
-              </div>
-            )}
-
-            {isLastStep && (
-              <div className="flex items-center gap-2 pt-1 animate-fadeIn">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={rememberWorkstation}
-                    onChange={(e) => setRememberWorkstation(e.target.checked)}
-                    className="rounded border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--accent-gold)] focus:ring-0 focus:ring-offset-0"
-                  />
-                  <span>Remember workstation token (30 Days)</span>
-                </label>
-              </div>
-            )}
-
-            <div className="flex items-center gap-3 pt-2">
-              {currentStep > 0 && (
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  disabled={loading}
-                  className="px-4 py-3.5 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono rounded-xl transition-colors cursor-pointer"
-                >
-                  BACK
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-mono font-medium tracking-wider uppercase text-xs rounded-xl py-3.5 px-4 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
-              >
-                <span>
-                  {loading
-                    ? "AUTHENTICATING..."
-                    : isLastStep
-                      ? "ACCESS PORTAL"
-                      : "CONTINUE"}
-                </span>
-                {!loading && (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                <div className="text-center pt-2">
+                  <Link
+                    href="/portal/signup"
+                    className="text-[var(--accent-gold)] hover:text-[var(--accent-gold-hover)] text-xs font-medium transition-colors"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M14 5l7 7m0 0l-7 7m7-7H3"
-                    />
-                  </svg>
-                )}
-              </button>
-            </div>
-
-            <div className="text-center pt-2">
-              <Link
-                href="/portal/signup"
-                className="text-[var(--accent-gold)] hover:text-[var(--accent-gold-hover)] text-xs font-medium transition-colors"
-              >
-                Don't have an account? Create Workspace
-              </Link>
-            </div>
-          </form>
+                    Don't have an account? Create Workspace
+                  </Link>
+                </div>
+              </form>
+            </>
+          )}
 
           <div className="mt-8 pt-6 border-t border-[var(--border-glass)] flex items-center justify-center gap-2 text-[11px] text-[var(--text-muted)] font-mono">
             <span>256-Bit Encrypted Session</span>

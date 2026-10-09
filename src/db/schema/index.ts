@@ -11,11 +11,30 @@ import {
 } from "drizzle-orm/mysql-core";
 import { relations } from "drizzle-orm";
 
+// ─────────────────────────────────────────────
 // Enums
+// ─────────────────────────────────────────────
 export const roleEnum = mysqlEnum("role", [
   "SUPER_ADMIN",
   "DEVELOPER",
   "CLIENT",
+]);
+
+export const leadStatusEnum = mysqlEnum("lead_status", [
+  "UNCLAIMED",
+  "CLAIMED",
+  "CONTACTED",
+  "REJECTED",
+  "CONVERTED",
+]);
+
+export const senderTypeEnum = mysqlEnum("sender_type", ["DEVELOPER", "CLIENT"]);
+
+export const messageStatusEnum = mysqlEnum("message_status", [
+  "PENDING",
+  "SENT",
+  "DELIVERED",
+  "FAILED",
 ]);
 
 export const projectStatusEnum = mysqlEnum("project_status", [
@@ -33,6 +52,10 @@ export const milestoneStatusEnum = mysqlEnum("milestone_status", [
   "VERIFYING",
   "COMPLETED",
 ]);
+
+// ─────────────────────────────────────────────
+// Tables
+// ─────────────────────────────────────────────
 
 // 1. Users Table
 export const users = mysqlTable(
@@ -73,15 +96,99 @@ export const developers = mysqlTable(
   }),
 );
 
-// 3. Clients Table
+// 3. Leads Table (Google Maps Scraped Targets)
+export const leads = mysqlTable(
+  "leads",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    niche: varchar("niche", { length: 100 }).notNull(),
+    city: varchar("city", { length: 100 }).notNull(),
+    reviewCount: int("review_count").default(0).notNull(),
+    rating: varchar("rating", { length: 10 }),
+    mapsUrl: text("maps_url"),
+    phone: varchar("phone", { length: 32 }),
+    maskedPhone: varchar("masked_phone", { length: 32 }),
+    realPhoneNumber: varchar("real_phone_number", { length: 32 }), // SECURED / HIDDEN
+    status: leadStatusEnum.default("UNCLAIMED").notNull(),
+    hasWebsite: boolean("has_website").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    cityNicheIdx: index("idx_leads_city_niche").on(table.city, table.niche),
+    phoneIdx: index("idx_leads_phone").on(table.phone),
+  }),
+);
+
+// 4. Lead Assignments Table
+export const leadAssignments = mysqlTable(
+  "lead_assignments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    leadId: varchar("lead_id", { length: 36 }).notNull(),
+    developerId: varchar("developer_id", { length: 36 }).notNull(),
+    claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    leadDevIdx: uniqueIndex("idx_lead_assignments_unique").on(
+      table.leadId,
+      table.developerId,
+    ),
+  }),
+);
+
+// 5. Messages Table (Masked Chat Logs)
+export const messages = mysqlTable(
+  "messages",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    leadId: varchar("lead_id", { length: 36 }).notNull(),
+    senderId: varchar("sender_id", { length: 36 }),
+    senderType: senderTypeEnum.notNull(),
+    messageText: text("message_text").notNull(),
+    status: messageStatusEnum.default("PENDING").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    leadMsgIdx: index("idx_messages_lead_id").on(table.leadId),
+    statusIdx: index("idx_messages_status").on(table.status),
+  }),
+);
+
+// 6. System Status Table (Live WhatsApp QR & Connection Session)
+export const systemStatus = mysqlTable("system_status", {
+  id: varchar("id", { length: 64 }).primaryKey(), // e.g. "whatsapp-session"
+  qrCode: text("qr_code"),
+  isConnected: boolean("is_connected").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// 7. Search Rate Limiting Log Table
+export const searchLogs = mysqlTable(
+  "search_logs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    developerId: varchar("developer_id", { length: 36 }).notNull(),
+    query: varchar("query", { length: 255 }).notNull(),
+    executedAt: timestamp("executed_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    devTimeIdx: index("idx_search_logs_dev_time").on(
+      table.developerId,
+      table.executedAt,
+    ),
+  }),
+);
+
+// 8. Clients Table
 export const clients = mysqlTable(
   "clients",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
     developerId: varchar("developer_id", { length: 36 }).notNull(),
-    userId: varchar("user_id", { length: 36 }), // Connected Client Account
-    name: varchar("name", { length: 180 }).notNull(), // Client Contact Name
-    brandName: varchar("brand_name", { length: 180 }).notNull(), // Brand / Business Name
+    userId: varchar("user_id", { length: 36 }),
+    name: varchar("name", { length: 180 }).notNull(),
+    brandName: varchar("brand_name", { length: 180 }).notNull(),
     slug: varchar("slug", { length: 64 }).notNull(),
     businessType: varchar("business_type", { length: 64 }).notNull(),
     customDomain: varchar("custom_domain", { length: 255 }),
@@ -96,7 +203,7 @@ export const clients = mysqlTable(
   }),
 );
 
-// 4. Projects & Search Code (JOB-XXXXX)
+// 9. Projects & Search Code (JOB-XXXXX)
 export const projects = mysqlTable(
   "projects",
   {
@@ -119,7 +226,7 @@ export const projects = mysqlTable(
   }),
 );
 
-// 5. Milestones Table
+// 10. Milestones Table
 export const milestones = mysqlTable(
   "milestones",
   {
@@ -139,7 +246,9 @@ export const milestones = mysqlTable(
   }),
 );
 
+// ─────────────────────────────────────────────
 // Drizzle Relations
+// ─────────────────────────────────────────────
 export const usersRelations = relations(users, ({ one }) => ({
   developer: one(developers, {
     fields: [users.id],
@@ -151,6 +260,30 @@ export const developersRelations = relations(developers, ({ one, many }) => ({
   user: one(users, { fields: [developers.userId], references: [users.id] }),
   clients: many(clients),
   projects: many(projects),
+  leadAssignments: many(leadAssignments),
+}));
+
+export const leadsRelations = relations(leads, ({ many }) => ({
+  assignments: many(leadAssignments),
+  messages: many(messages),
+}));
+
+export const leadAssignmentsRelations = relations(
+  leadAssignments,
+  ({ one }) => ({
+    lead: one(leads, {
+      fields: [leadAssignments.leadId],
+      references: [leads.id],
+    }),
+    developer: one(developers, {
+      fields: [leadAssignments.developerId],
+      references: [developers.id],
+    }),
+  }),
+);
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  lead: one(leads, { fields: [messages.leadId], references: [leads.id] }),
 }));
 
 export const clientsRelations = relations(clients, ({ one, many }) => ({
@@ -172,4 +305,11 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     references: [developers.id],
   }),
   milestones: many(milestones),
+}));
+
+export const milestonesRelations = relations(milestones, ({ one }) => ({
+  project: one(projects, {
+    fields: [milestones.projectId],
+    references: [projects.id],
+  }),
 }));

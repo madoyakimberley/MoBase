@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { users, developers, clients, projects } from "@/db/schema";
+import { users, developers } from "@/db/schema";
 import { eq, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -104,37 +104,7 @@ export async function POST(req: Request) {
       companyName: fullName,
     });
 
-    // 5. Provision Initial Client Record
-    const clientId = crypto.randomUUID();
-    const clientSlug = `${username}-client`;
-
-    await db.insert(clients).values({
-      id: clientId,
-      developerId,
-      userId,
-      name: fullName,
-      brandName: fullName,
-      slug: clientSlug,
-      businessType: "GENERAL",
-      whatsappNumber: "0000000000",
-    });
-
-    // 6. Provision Initial Project
-    const assignedProjectId = crypto.randomUUID();
-    const generatedCode = `JOB-${Math.floor(10000 + Math.random() * 90000)}`;
-
-    await db.insert(projects).values({
-      id: assignedProjectId,
-      searchCode: generatedCode,
-      clientId,
-      developerId,
-      title: `${fullName} Digital Architecture`,
-      status: "IN_PROGRESS",
-      depositPaid: false,
-      totalPriceKes: 20000,
-    });
-
-    // 7. Issue Session Token
+    // 5. Issue Session Token (No dummy client or project created)
     const sessionToken = crypto.randomBytes(32).toString("hex");
     const sessionData = JSON.stringify({
       userId,
@@ -142,7 +112,7 @@ export async function POST(req: Request) {
       role,
       email,
       username,
-      projectId: assignedProjectId,
+      projectId: null,
     });
 
     await redis.set(
@@ -156,7 +126,7 @@ export async function POST(req: Request) {
       success: true,
       role,
       developerId,
-      projectId: assignedProjectId,
+      projectId: null,
     });
 
     res.cookies.set("mobase_session", sessionToken, {

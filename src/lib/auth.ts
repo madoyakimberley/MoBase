@@ -13,6 +13,12 @@ export interface Session {
   role: Role;
   fullName: string;
   email: string;
+  user: {
+    id: string;
+    role: Role;
+    fullName: string;
+    email: string;
+  };
 }
 
 /**
@@ -51,11 +57,19 @@ export async function getSession(): Promise<Session | null> {
 
   if (!user || !user.isActive) return null;
 
+  const role = user.role as Role;
+
   return {
     userId: user.id,
-    role: user.role as Role,
+    role,
     fullName: user.fullName,
     email: user.email,
+    user: {
+      id: user.id,
+      role,
+      fullName: user.fullName,
+      email: user.email,
+    },
   };
 }
 
