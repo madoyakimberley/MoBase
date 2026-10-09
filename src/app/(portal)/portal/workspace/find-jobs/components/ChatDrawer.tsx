@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lock, X, Bot, Send, Check, CheckCheck } from "lucide-react";
+import { Lock, X, Bot, Send, Check, CheckCheck, WifiOff } from "lucide-react";
 import { Lead, Message } from "./types";
 
 interface ChatDrawerProps {
@@ -72,13 +72,81 @@ export function ChatDrawer({
   const [messageInput, setMessageInput] = useState("");
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [sendingMsg, setSendingMsg] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
-  // Fetch chat history from DB & poll every 2.5s
+  // Load cached messages from local storage on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(`mobase_chat_${activeLead.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setChatMessages(parsed);
+          setLoadingHistory(false);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load cached chat history:", err);
+    }
+  }, [activeLead.id]);
+
+  // Flush queued offline messages when network becomes available
+  const flushPendingQueue = async () => {
+    if (!navigator.onLine) return;
+
+    try {
+      const queueRaw = localStorage.getItem("mobase_pending_chat_queue");
+      if (!queueRaw) return;
+
+      const queue: { leadId: string; messageText: string; tempId: string }[] =
+        JSON.parse(queueRaw);
+      if (!Array.isArray(queue) || queue.length === 0) return;
+
+      const remainingQueue = [];
+
+      for (const item of queue) {
+        try {
+          const res = await fetch("/api/dev/leads/chat/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              leadId: item.leadId,
+              messageText: item.messageText,
+            }),
+          });
+
+          if (!res.ok) {
+            remainingQueue.push(item);
+          } else {
+            onStatusUpdate(item.leadId, "CONTACTED");
+          }
+        } catch {
+          remainingQueue.push(item);
+        }
+      }
+
+      localStorage.setItem(
+        "mobase_pending_chat_queue",
+        JSON.stringify(remainingQueue),
+      );
+    } catch (err) {
+      console.error("Failed to flush pending chat queue:", err);
+    }
+  };
+
+  // Fetch chat history from DB & poll every 2.5s with offline protection
   useEffect(() => {
     let isMounted = true;
 
     const fetchHistory = async () => {
+      if (!navigator.onLine) {
+        if (isMounted) setIsOffline(true);
+        return;
+      }
+
       try {
+        await flushPendingQueue();
+
         const res = await fetch(
           `/api/dev/leads/chat/messages?leadId=${encodeURIComponent(
             activeLead.id,
@@ -87,10 +155,17 @@ export function ChatDrawer({
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           if (isMounted) {
-            setChatMessages(data.messages || []);
+            const fetched = data.messages || [];
+            setChatMessages(fetched);
+            setIsOffline(false);
+            localStorage.setItem(
+              `mobase_chat_${activeLead.id}`,
+              JSON.stringify(fetched),
+            );
           }
         }
       } catch (err) {
+        if (isMounted) setIsOffline(true);
         console.error("Failed to load chat history:", err);
       } finally {
         if (isMounted) setLoadingHistory(false);
@@ -100,9 +175,25 @@ export function ChatDrawer({
     fetchHistory();
     const interval = setInterval(fetchHistory, 2500);
 
+    const handleOnline = () => {
+      if (isMounted) {
+        setIsOffline(false);
+        fetchHistory();
+      }
+    };
+
+    const handleOffline = () => {
+      if (isMounted) setIsOffline(true);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, [activeLead.id]);
 
@@ -110,7 +201,7 @@ export function ChatDrawer({
     e.preventDefault();
     if (!messageInput.trim()) return;
 
-    if (!isWhatsAppConnected) {
+    if (!isWhatsAppConnected && navigator.onLine) {
       onOpenQrModal();
       return;
     }
@@ -119,15 +210,52 @@ export function ChatDrawer({
     setMessageInput("");
     setSendingMsg(true);
 
+    const tempId = Date.now().toString();
+
     // Optimistic UI insert with PENDING single tick status
     const tempMsg: Message = {
-      id: Date.now().toString(),
+      id: tempId,
       senderType: "DEVELOPER",
       messageText: userText,
       status: "PENDING",
       createdAt: new Date().toISOString(),
     };
-    setChatMessages((prev) => [...prev, tempMsg]);
+
+    setChatMessages((prev) => {
+      const updated = [...prev, tempMsg];
+      localStorage.setItem(
+        `mobase_chat_${activeLead.id}`,
+        JSON.stringify(updated),
+      );
+      return updated;
+    });
+
+    if (!navigator.onLine) {
+      // Save to offline pending queue
+      try {
+        const existingQueueRaw = localStorage.getItem(
+          "mobase_pending_chat_queue",
+        );
+        const existingQueue = existingQueueRaw
+          ? JSON.parse(existingQueueRaw)
+          : [];
+        existingQueue.push({
+          leadId: activeLead.id,
+          messageText: userText,
+          tempId,
+        });
+        localStorage.setItem(
+          "mobase_pending_chat_queue",
+          JSON.stringify(existingQueue),
+        );
+        onStatusUpdate(activeLead.id, "CONTACTED");
+      } catch (err) {
+        console.error("Failed to queue offline message:", err);
+      } finally {
+        setSendingMsg(false);
+      }
+      return;
+    }
 
     try {
       const res = await fetch("/api/dev/leads/chat/send", {
@@ -159,8 +287,16 @@ export function ChatDrawer({
         {/* Drawer Header */}
         <div className="flex items-start justify-between border-b border-[var(--border-glass)] pb-4">
           <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 font-semibold mb-1">
-              <Lock className="w-3 h-3" /> SECURE PROXY ROUTE ACTIVE
+            <div className="flex items-center gap-1.5 text-[10px] font-mono font-semibold mb-1">
+              {isOffline ? (
+                <span className="text-amber-400 flex items-center gap-1">
+                  <WifiOff className="w-3 h-3" /> OFFLINE MODE (CACHED)
+                </span>
+              ) : (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> SECURE PROXY ROUTE ACTIVE
+                </span>
+              )}
             </div>
             <h3 className="font-serif text-xl text-[var(--text-primary)]">
               {activeLead.name}
@@ -240,7 +376,11 @@ export function ChatDrawer({
             type="text"
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
-            placeholder="Type outreach message..."
+            placeholder={
+              isOffline
+                ? "Type message (will queue offline)..."
+                : "Type outreach message..."
+            }
             className="flex-1 px-4 py-2.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-gold)]"
             required
           />

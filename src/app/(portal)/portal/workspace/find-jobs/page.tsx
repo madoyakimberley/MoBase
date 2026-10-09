@@ -11,6 +11,7 @@ import {
   ArrowRight,
   QrCode,
   ChevronDown,
+  WifiOff,
 } from "lucide-react";
 
 import { Lead } from "./components/types";
@@ -52,6 +53,7 @@ export default function FindJobsPage() {
   const [visibleCount, setVisibleCount] = useState<number>(3); // Lazy render batching
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
 
   // WhatsApp QR Code & Session State
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
@@ -62,10 +64,48 @@ export default function FindJobsPage() {
   // Secure Chat Drawer State
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
 
+  // Restore cached leads and search parameters on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("mobase_cached_leads");
+      const cachedQuery = localStorage.getItem("mobase_last_query");
+      const cachedMinReviews = localStorage.getItem("mobase_last_min_reviews");
+
+      if (cachedQuery) setQuery(cachedQuery);
+      if (cachedMinReviews) setMinReviews(parseInt(cachedMinReviews, 10) || 15);
+
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLeads(parsed);
+          setHasScanned(true);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to restore cached leads:", err);
+    }
+  }, []);
+
+  // Sync leads state changes directly to localStorage
+  const updateAndCacheLeads = (
+    newLeads: Lead[] | ((prev: Lead[]) => Lead[]),
+  ) => {
+    setLeads((prev) => {
+      const updated =
+        typeof newLeads === "function" ? newLeads(prev) : newLeads;
+      try {
+        localStorage.setItem("mobase_cached_leads", JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to save leads to cache:", err);
+      }
+      return updated;
+    });
+  };
+
   // On-Demand Worker Boot & QR status polling
   const handleOpenQrModal = async () => {
     setShowQrModal(true);
-    if (!isWhatsAppConnected) {
+    if (!isWhatsAppConnected && navigator.onLine) {
       try {
         await fetch("/api/dev/whatsapp/start", { method: "POST" });
       } catch (err) {
@@ -78,6 +118,7 @@ export default function FindJobsPage() {
     let interval: NodeJS.Timeout;
 
     const checkStatus = async () => {
+      if (!navigator.onLine) return;
       try {
         const res = await fetch("/api/dev/whatsapp/status");
         if (res.ok) {
@@ -107,8 +148,29 @@ export default function FindJobsPage() {
     setError(null);
     setHasScanned(true);
     setVisibleCount(3); // Reset lazy display queue to 3 cards
+    setIsOfflineMode(!navigator.onLine);
 
     try {
+      localStorage.setItem("mobase_last_query", searchQuery);
+      localStorage.setItem("mobase_last_min_reviews", reviewsCutoff.toString());
+
+      if (!navigator.onLine) {
+        const cached = localStorage.getItem("mobase_cached_leads");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLeads(parsed);
+            setError(
+              "Working Offline: Showing locally cached lead search results.",
+            );
+            return;
+          }
+        }
+        throw new Error(
+          "Offline mode: No cached leads available for this query.",
+        );
+      }
+
       const res = await fetch(
         `/api/dev/leads/search?query=${encodeURIComponent(
           searchQuery,
@@ -118,8 +180,24 @@ export default function FindJobsPage() {
 
       if (!res.ok) throw new Error(data.error || "Failed to scan Google Maps");
 
-      setLeads(data.leads || []);
+      const fetchedLeads = data.leads || [];
+      updateAndCacheLeads(fetchedLeads);
     } catch (err: any) {
+      // Fallback to local offline cache if search request fails
+      const cached = localStorage.getItem("mobase_cached_leads");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLeads(parsed);
+            setError(
+              `${err.message || "Network error"}. Displaying offline cached results.`,
+            );
+            setIsOfflineMode(true);
+            return;
+          }
+        } catch {}
+      }
       setError(err.message || "An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -134,39 +212,49 @@ export default function FindJobsPage() {
   const handleStartChat = async (lead: Lead) => {
     setActiveLead(lead);
     if (lead.status === "UNCLAIMED") {
-      try {
-        await fetch("/api/dev/leads/claim", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadId: lead.id }),
-        });
-        setLeads((prev) =>
-          prev.map((l) => (l.id === lead.id ? { ...l, status: "CLAIMED" } : l)),
-        );
-      } catch (err) {
-        console.error("Claiming lead failed:", err);
+      updateAndCacheLeads((prev) =>
+        prev.map((l) => (l.id === lead.id ? { ...l, status: "CLAIMED" } : l)),
+      );
+
+      if (navigator.onLine) {
+        try {
+          await fetch("/api/dev/leads/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ leadId: lead.id }),
+          });
+        } catch (err) {
+          console.error("Claiming lead failed on server:", err);
+        }
       }
     }
   };
 
   const handleToggleClaim = async (lead: Lead) => {
-    try {
-      const res = await fetch("/api/dev/leads/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: lead.id }),
-      });
-      const data = await res.json().catch(() => ({}));
+    const nextStatus = lead.status === "CLAIMED" ? "UNCLAIMED" : "CLAIMED";
+    updateAndCacheLeads((prev) =>
+      prev.map((l) => (l.id === lead.id ? { ...l, status: nextStatus } : l)),
+    );
 
-      if (res.ok && data.status) {
-        setLeads((prev) =>
-          prev.map((l) =>
-            l.id === lead.id ? { ...l, status: data.status } : l,
-          ),
-        );
+    if (navigator.onLine) {
+      try {
+        const res = await fetch("/api/dev/leads/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId: lead.id }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.status) {
+          updateAndCacheLeads((prev) =>
+            prev.map((l) =>
+              l.id === lead.id ? { ...l, status: data.status } : l,
+            ),
+          );
+        }
+      } catch (err) {
+        console.error("Claim failed on server:", err);
       }
-    } catch (err) {
-      console.error("Claim failed:", err);
     }
   };
 
@@ -177,11 +265,11 @@ export default function FindJobsPage() {
   };
 
   const handleDismissLead = (id: string) => {
-    setLeads((prev) => prev.filter((l) => l.id !== id));
+    updateAndCacheLeads((prev) => prev.filter((l) => l.id !== id));
   };
 
   const handleUpdateLeadStatus = (leadId: string, newStatus: "CONTACTED") => {
-    setLeads((prev) =>
+    updateAndCacheLeads((prev) =>
       prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l)),
     );
   };
@@ -292,8 +380,12 @@ export default function FindJobsPage() {
       {loading && <JobCardsGridSkeleton count={3} />}
 
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-2xl font-mono flex items-center gap-3">
-          <ShieldAlert className="w-5 h-5 shrink-0" />
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs rounded-2xl font-mono flex items-center gap-3">
+          {isOfflineMode ? (
+            <WifiOff className="w-5 h-5 shrink-0 text-amber-400" />
+          ) : (
+            <ShieldAlert className="w-5 h-5 shrink-0 text-red-400" />
+          )}
           <span>{error}</span>
         </div>
       )}

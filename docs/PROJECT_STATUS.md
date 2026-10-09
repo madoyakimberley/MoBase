@@ -1,52 +1,32 @@
-# MoBase - Project Overview & Status
+# Project Status — MoBase Lead Discovery Console
 
-## Tech Stack
+## Current Phase: Stress Testing & Offline Resilience Verification
 
-- **Framework**: Next.js (App Router, TypeScript)[cite: 10]
-- **Database**: MySQL / PlanetScale[cite: 10]
-- **ORM**: Drizzle ORM[cite: 10]
-- **Cache & Rate Limiting**: Upstash Redis[cite: 10]
-- **Auth**: Custom Cookie/Redis Session-based Auth with Bcrypt password hashing[cite: 10]
-- **Outreach Engine**: `whatsapp-web.js`, `qrcode-terminal`, `mysql2`, `dotenv`
+### Milestone Completion Summary
 
----
-
-## Database Schema Summary
-
-| Table               | Primary Key | Key Fields / Constraints                                      | Description                                                   |
-| :------------------ | :---------- | :------------------------------------------------------------ | :------------------------------------------------------------ |
-| **`users`**         | `id` (UUID) | `email` (Unique), `username` (Unique), `passwordHash`, `role` | Base user accounts (SUPER_ADMIN, DEVELOPER, CLIENT)[cite: 10] |
-| **`developers`**    | `id` (UUID) | `userId` (FK -> users), `workspaceSlug` (Unique)              | Developer workspace profiles[cite: 10]                        |
-| **`clients`**       | `id` (UUID) | `developerId` (FK -> developers), `userId` (FK -> users)      | Client accounts linked to workspaces[cite: 10]                |
-| **`projects`**      | `id` (UUID) | `searchCode` (Unique), `clientId` (FK), `developerId` (FK)    | Workspace project tracking[cite: 10]                          |
-| **`milestones`**    | `id` (UUID) | `projectId` (FK), `status`, `sortOrder`                       | Individual project milestones[cite: 10]                       |
-| **`leads`**         | `id` (UUID) | `name`, `phone`, `maskedPhone`, `status`                      | Business leads scraped from Google Maps                       |
-| **`messages`**      | `id` (UUID) | `leadId` (FK -> leads), `senderType`, `messageText`, `status` | Outbound & Inbound proxy WhatsApp communications              |
-| **`system_status`** | `id`        | `qrCode`, `isConnected`, `updatedAt`                          | Live WhatsApp web session QR state & connection status        |
+| Category                | Status       | Details                                                                                                       |
+| :---------------------- | :----------- | :------------------------------------------------------------------------------------------------------------ |
+| **API Hardening**       | ✅ Completed | Zero-trust verification, origin validation, RBAC enforcement (`DEVELOPER` / `SUPER_ADMIN`), redacted logging. |
+| **Worker Architecture** | ✅ Completed | Single-instance WhatsApp worker spawned via process isolation with `.whatsapp-worker.lock` protection.        |
+| **PWA Configuration**   | ✅ Completed | Web app manifest active, Workbox asset pre-caching configured, viewport/status bar settings linked.           |
+| **Offline Resilience**  | ✅ Completed | Local session fallback, cached lead searches, optimistic chat drawer queueing with auto-flushing.             |
+| **Client UI Shell**     | ✅ Completed | Connectivity badges (`Wifi`/`WifiOff`), lazy card rendering, glassmorphic floating navigation.                |
 
 ---
 
-## Current Status
+## Next Steps: Stress Testing Agenda
 
-> ✅ **SYSTEM STATUS: LEAD DISCOVERY & PROXY OUTREACH OPERATIONAL**
->
-> - **Lead Scraper & Cache**: Fully optimized with MySQL pre-caching (<50ms response) and asset-blocked Puppeteer scraping[cite: 8].
-> - **Wix/Subdomain Filter**: Strict filtering actively purges `.wixsite.com` and builder subdomains[cite: 8].
-> - **Modular Console**: UI separated into co-located components with skeleton loaders, lazy streaming, and WhatsApp read receipts (single/double grey and gold ticks)[cite: 5, 6].
-> - **Stability**: Turbopack compiler panics and JSON parsing errors resolved.
+1. **Service Worker Asset Verification**:
+   - Verify that static routes and asset bundles cache properly when running production builds (`npm run build && npm run start`).
+   - Audit app installation capability on desktop/mobile Chrome & Safari.
 
----
+2. **Network Interruption & Queue Flushing Simulation**:
+   - Test search execution under artificial offline conditions (DevTools network throttling/offline mode).
+   - Compose outreach messages while offline and verify automatic queue dispatch upon reconnecting.
 
-## Next Steps / Todo
+3. **Concurrency & Worker Process Stress Testing**:
+   - Attempt duplicate `POST /api/dev/whatsapp/start` calls simultaneously to verify `.whatsapp-worker.lock` prevents process duplication.
+   - Test worker stability under simulated high message volume.
 
-- [x] **Lead Discovery & Proxy Chat Optimization**:
-  - [x] Fast MySQL cache check & Puppeteer network asset blocking[cite: 8].
-  - [x] Modularized UI components (`LeadCard`, `ChatDrawer`, `QrModal`)[cite: 5].
-  - [x] Pure zero-website filtering (purging Wix/Wordpress subdomains)[cite: 8].
-  - [x] Lazy card rendering & WhatsApp read receipts[cite: 6].
-  - [x] Safe JSON text parsing in polling handlers.
-- [ ] **Client Workspace Portal & Chat Wall (NEXT PHASE)**:
-  - [ ] Build `/portal/workspace/clients` page layout.
-  - [ ] Implement central Client Chat Wall interface.
-  - [ ] Connect client list and conversation streams to MySQL `messages` & `clients` tables.
-  - [ ] Implement client onboarding / project management controls.
+4. **Active Jobs Workspace Integration** _(Pending UI update)_:
+   - Finalize `src/app/portal/workspace/active-jobs/page.tsx` for tracking claimed job conversions and client stage history.

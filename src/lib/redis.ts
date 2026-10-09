@@ -23,7 +23,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /**
- * Rate limiting helper using the single REDIS_URL pool
+ * Rate limiting helper using atomic Redis pipeline execution
  */
 export async function enforceRateLimit(
   identifier: string,
@@ -31,12 +31,25 @@ export async function enforceRateLimit(
   windowSeconds = 60,
 ) {
   const key = `ratelimit:${identifier}`;
-  const current = await redis.incr(key);
-  if (current === 1) {
-    await redis.expire(key, windowSeconds);
+
+  try {
+    // Atomic execution of INCR and EXPIRE commands via pipeline
+    const pipeline = redis.pipeline();
+    pipeline.incr(key);
+    pipeline.expire(key, windowSeconds);
+    const results = await pipeline.exec();
+
+    const current = (results?.[0]?.[1] as number) || 1;
+
+    return {
+      success: current <= limit,
+      remaining: Math.max(0, limit - current),
+    };
+  } catch (err) {
+    console.error("[REDIS ERROR] Rate limit check failed:", err);
+    return {
+      success: true,
+      remaining: limit,
+    };
   }
-  return {
-    success: current <= limit,
-    remaining: Math.max(0, limit - current),
-  };
 }

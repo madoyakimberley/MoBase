@@ -1,41 +1,40 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from "../components/Themeprovider";
+import type { Metadata, Viewport } from "next";
+import { ThemeProvider } from "@/components/Themeprovider";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "MoBase Studio | High-Velocity Digital Architecture",
+  title: "MoBase | Developer-First Platform",
   description:
-    "Bespoke web platforms built on Next.js Edge architecture with native WhatsApp conversions.",
+    "Production-hardened lead management and high-velocity edge architecture.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MoBase",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors duration-300">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-        >
+    <html lang="en" suppressHydrationWarning>
+      <head />
+      <body className="antialiased bg-[var(--bg-canvas)] text-[var(--text-primary)]">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
       </body>

@@ -1,27 +1,54 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/db";
-import { leads, messages } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { leads, messages, leadAssignments } from "@/db/schema";
+import { eq, and, gte } from "drizzle-orm";
+import { validateOrigin, validateMessageText, logError } from "@/lib/security";
+import crypto from "crypto";
 
 export async function POST(req: Request) {
+  let currentLeadId = "";
   try {
-    const session = await getSession();
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    if (!validateOrigin(req)) {
+      return NextResponse.json(
+        { error: "Forbidden cross-origin request" },
+        { status: 403 },
+      );
     }
 
-    const body = await req.json().catch(() => ({}));
+    const session = await getSession();
+    if (
+      !session ||
+      (session.role !== "DEVELOPER" && session.role !== "SUPER_ADMIN")
+    ) {
+      return NextResponse.json(
+        { error: "Unauthorized access" },
+        { status: 401 },
+      );
+    }
+
+    const userId = session.userId || session.user?.id;
+
+    const rawText = await req.text();
+    const body = rawText ? JSON.parse(rawText) : {};
     const { leadId, messageText } = body;
 
-    if (!leadId || !messageText) {
+    if (!leadId) {
       return NextResponse.json(
-        { error: "leadId and messageText are required" },
+        { error: "leadId is required" },
         { status: 400 },
       );
     }
 
-    // 1. Verify lead exists in database
+    currentLeadId = leadId;
+
+    // 1. Validate message text (1 to 1,000 trimmed characters)
+    const validation = validateMessageText(messageText);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    // 2. Verify lead exists in database
     const [existingLead] = await db
       .select()
       .from(leads)
@@ -35,24 +62,71 @@ export async function POST(req: Request) {
       );
     }
 
+    // 3. Strict Lead Ownership Check (Return 404 for unauthorized access)
+    if (session.role !== "SUPER_ADMIN") {
+      const [assignment] = await db
+        .select()
+        .from(leadAssignments)
+        .where(
+          and(
+            eq(leadAssignments.leadId, leadId),
+            eq(leadAssignments.developerId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!assignment) {
+        return NextResponse.json(
+          { error: "Lead not found or access denied" },
+          { status: 404 },
+        );
+      }
+    }
+
+    // 4. Opt-Out Check
+    if ((existingLead.status as string) === "DO_NOT_CONTACT") {
+      return NextResponse.json(
+        { error: "This lead has opted out of communication." },
+        { status: 400 },
+      );
+    }
+
+    // 5. 1-Minute Duplicate Message Suppression
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+    const [recentDuplicate] = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.leadId, leadId),
+          eq(messages.messageText, validation.cleanText),
+          gte(messages.createdAt, oneMinuteAgo),
+        ),
+      )
+      .limit(1);
+
+    if (recentDuplicate) {
+      return NextResponse.json(
+        {
+          error:
+            "Duplicate message detected. Please wait a minute before re-sending.",
+        },
+        { status: 429 },
+      );
+    }
+
     const messageId = crypto.randomUUID();
 
-    // 2. Queue message with status 'PENDING' for whatsapp-worker to pick up
+    // 6. Queue message with status 'PENDING' for whatsapp-worker to pick up
     await db.insert(messages).values({
       id: messageId,
       leadId,
-      senderId: session.user.id,
+      senderId: userId,
       senderType: "DEVELOPER",
-      messageText,
+      messageText: validation.cleanText,
       status: "PENDING",
       createdAt: new Date(),
     });
-
-    // 3. Update lead status to 'CONTACTED'
-    await db
-      .update(leads)
-      .set({ status: "CONTACTED" })
-      .where(eq(leads.id, leadId));
 
     return NextResponse.json(
       {
@@ -61,14 +135,18 @@ export async function POST(req: Request) {
           id: messageId,
           leadId,
           senderType: "DEVELOPER" as const,
-          messageText,
+          messageText: validation.cleanText,
           status: "PENDING",
         },
       },
       { status: 200 },
     );
   } catch (error) {
-    console.error("POST /api/dev/leads/chat/send error:", error);
+    logError(
+      "POST /api/dev/leads/chat/send error",
+      currentLeadId || "unknown",
+      error,
+    );
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

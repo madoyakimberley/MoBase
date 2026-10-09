@@ -9,8 +9,14 @@ const SESSION_ID = "whatsapp-session";
 export async function GET() {
   try {
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    if (
+      !session ||
+      (session.role !== "DEVELOPER" && session.role !== "SUPER_ADMIN")
+    ) {
+      return NextResponse.json(
+        { error: "Unauthorized access" },
+        { status: 401 },
+      );
     }
 
     // 1. Fetch current WhatsApp session status from database

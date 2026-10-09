@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { searchLogs } from "@/db/schema";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and, gte, count } from "drizzle-orm";
 import crypto from "crypto";
 
 const MAX_SEARCHES_PER_WINDOW = 5;
@@ -9,8 +9,9 @@ const WINDOW_MINUTES = 15;
 export async function checkScrapeRateLimit(userId: string) {
   const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000);
 
-  const recentLogs = await db
-    .select()
+  // Optimized database COUNT query instead of fetching entire row arrays into memory
+  const [result] = await db
+    .select({ total: count() })
     .from(searchLogs)
     .where(
       and(
@@ -19,7 +20,9 @@ export async function checkScrapeRateLimit(userId: string) {
       ),
     );
 
-  if (recentLogs.length >= MAX_SEARCHES_PER_WINDOW) {
+  const searchCount = result?.total ?? 0;
+
+  if (searchCount >= MAX_SEARCHES_PER_WINDOW) {
     return {
       allowed: false,
       remaining: 0,
@@ -29,7 +32,7 @@ export async function checkScrapeRateLimit(userId: string) {
 
   return {
     allowed: true,
-    remaining: MAX_SEARCHES_PER_WINDOW - recentLogs.length - 1,
+    remaining: MAX_SEARCHES_PER_WINDOW - searchCount - 1,
     resetMinutes: WINDOW_MINUTES,
   };
 }

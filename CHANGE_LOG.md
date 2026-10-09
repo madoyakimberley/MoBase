@@ -1,30 +1,29 @@
-# MoBase - Development Changelog
+# Changelog
 
-## [Unreleased] - 2026-10-09
+All notable changes to the MoBase platform will be documented in this file.
 
-### Lead Discovery Engine & Performance Optimization
+## [Unreleased] - Hardening, PWA Setup & Offline Resilience
 
-- **Database Cache Lookup**: Implemented fast MySQL pre-search cache check in `GET /api/dev/leads/search` returning cached qualified leads in under 50ms[cite: 8].
-- **Puppeteer Network Interception**: Added asset blocking for images, stylesheets, fonts, and media during Google Maps scraping, reducing DOM extraction latency by ~70%[cite: 8].
-- **Parallel Database Operations**: Replaced sequential async loops with `Promise.all` for batch lead processing and safe null fallback phone masking[cite: 8].
-- **Strict Website & Free Subdomain Detection**: Enhanced filter engine in `search/route.ts` to inspect `href` links, `data-item-id="authority"`, and explicitly purge free builder domains (`.wixsite.com`, `.wordpress.com`, etc.) to guarantee 100% pure no-website leads[cite: 8].
+### Added
 
-### Modular UI & Discovery Console Refactoring
+- **PWA & Offline Asset Caching**:
+  - Integrated `@ducanh2912/next-pwa` in `next.config.ts` with Workbox `skipWaiting` and aggressive frontend navigation caching.
+  - Created web application manifest `public/manifest.json` configured for standalone execution.
+  - Configured root `layout.tsx` metadata with PWA status bar styles and web manifest links.
+- **Offline Network Detection & Session Fallbacks**:
+  - Implemented real-time network status indicators (`ONLINE` / `OFFLINE`) and top banner warnings in `src/app/portal/workspace/layout.tsx`.
+  - Added session persistence via `localStorage` (`mobase_dev_user`) to maintain developer access during offline intervals.
+- **Offline Lead Discovery & Proxy Chat Caching**:
+  - Added `localStorage` caching for Google Maps search queries and lead datasets (`mobase_cached_leads`).
+  - Implemented an optimistic offline message queue (`mobase_pending_chat_queue`) in `ChatDrawer.tsx` that automatically flushes queued outbound messages when internet connectivity is restored.
 
-- **Co-located Workspace Architecture**: Refactored `/portal/workspace/find-jobs` into modularized, localized components[cite: 5]:
-  - `components/types.ts`: Shared lead and chat message interfaces.
-  - `components/LeadCard.tsx`: Itemized lead card UI with masked contact details and action triggers[cite: 7].
-  - `components/QrModal.tsx`: WhatsApp account linking modal with `QrSkeleton` state.
-  - `components/ChatDrawer.tsx`: Masked developer proxy chat drawer with `ChatHistorySkeleton`[cite: 6].
-- **Zero-Spinner Skeleton Loaders**: Removed all loading spinners across search grids, QR generation, and chat streams in favor of structural animated skeletons.
-- **Lazy Card Streaming**: Added batch rendering (3 cards per view) with a "Load More" stream trigger.
-- **WhatsApp Read Receipts**: Integrated read status indicators matching Japandi design tokens:
-  - `PENDING` (Single Grey Tick)
-  - `SENT` / `DELIVERED` (Double Grey Tick)
-  - `READ` (Double Gold Tick using `var(--accent-gold)`)[cite: 4, 6]
+### Changed
 
-### Stability & Build System Fixes
+- **WhatsApp Worker Boot & Status Endpoint Hardening**:
+  - Secured `GET /api/dev/whatsapp/status` with `DEVELOPER` and `SUPER_ADMIN` role checks.
+  - Hardened `POST /api/dev/whatsapp/start` with origin verification (`validateOrigin`), single-instance process lock files (`.whatsapp-worker.lock`), and unreferenced background process spawning using `child_process.spawn`.
 
-- **Turbopack Configuration**: Updated `next.config.ts` with top-level `turbopack.root` and `serverExternalPackages` (`whatsapp-web.js`, `puppeteer`, `mysql2`) to resolve Rust compiler panics.
-- **Safe JSON Parsing**: Replaced raw `req.json()` and `res.json()` with safe `req.text()` guards to eliminate `SyntaxError: Unexpected end of JSON input` during client polling.
-- **Type Safety**: Resolved Lucide SVG `title` prop type mismatch in `ReadReceipt` helper by wrapping icons in native `<span>` containers.
+### Security
+
+- Standardized RBAC checks and origin sanitization across all worker boot triggers and proxy communication routes.
+- Masked client contact information and personal phone numbers across the Chat Drawer and lead cards.
