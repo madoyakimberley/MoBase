@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { validateOrigin } from "@/lib/security";
 
-export const maxDuration = 60; // Extend duration limit on Vercel
+export const maxDuration = 60; // Allows up to 60s execution time on Vercel
 
 const SESSION_ID = "whatsapp-session";
 
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check database lock status instead of local disk file
+    // Check if session is already connected
     const [existing] = await db
       .select({
         isConnected: systemStatus.isConnected,
@@ -75,53 +75,70 @@ export async function POST(req: Request) {
       },
     });
 
-    client.on("qr", async (qr) => {
-      try {
-        await db
-          .insert(systemStatus)
-          .values({
-            id: SESSION_ID,
-            qrCode: qr,
-            isConnected: false,
-            updatedAt: new Date(),
-          })
-          .onDuplicateKeyUpdate({
-            set: { qrCode: qr, isConnected: false, updatedAt: new Date() },
-          });
-      } catch (err) {
-        console.error("Failed to write QR code to database:", err);
-      }
-    });
+    // Await QR code generation before completing HTTP response
+    const qrResult = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(
+          new Error(
+            "Timeout waiting for Browserless QR code generation (45s).",
+          ),
+        );
+      }, 45000);
 
-    client.on("ready", async () => {
-      try {
-        await db
-          .insert(systemStatus)
-          .values({
-            id: SESSION_ID,
-            qrCode: null,
-            isConnected: true,
-            updatedAt: new Date(),
-          })
-          .onDuplicateKeyUpdate({
-            set: { qrCode: null, isConnected: true, updatedAt: new Date() },
-          });
-      } catch (err) {
-        console.error("Failed to write connected state to database:", err);
-      }
-    });
+      client.on("qr", async (qr) => {
+        clearTimeout(timeout);
+        try {
+          await db
+            .insert(systemStatus)
+            .values({
+              id: SESSION_ID,
+              qrCode: qr,
+              isConnected: false,
+              updatedAt: new Date(),
+            })
+            .onDuplicateKeyUpdate({
+              set: { qrCode: qr, isConnected: false, updatedAt: new Date() },
+            });
+          resolve(qr);
+        } catch (err) {
+          reject(err);
+        }
+      });
 
-    // Fire initialization asynchronously without stalling HTTP response
-    client.initialize().catch((err) => {
-      console.error("Failed to initialize remote WhatsApp client:", err);
+      client.on("ready", async () => {
+        clearTimeout(timeout);
+        try {
+          await db
+            .insert(systemStatus)
+            .values({
+              id: SESSION_ID,
+              qrCode: null,
+              isConnected: true,
+              updatedAt: new Date(),
+            })
+            .onDuplicateKeyUpdate({
+              set: { qrCode: null, isConnected: true, updatedAt: new Date() },
+            });
+          resolve("CONNECTED");
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      client.initialize().catch((err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
     });
 
     return NextResponse.json({
       success: true,
-      message: "Remote WhatsApp worker spawned via Browserless.io.",
+      message: "QR code generated successfully.",
+      qrCode: qrResult !== "CONNECTED" ? qrResult : null,
       developerId: userId,
     });
   } catch (error: any) {
+    console.error("[WHATSAPP WORKER ERROR]:", error);
     return NextResponse.json(
       { error: error.message || "Failed to boot WhatsApp worker." },
       { status: 500 },
