@@ -14,6 +14,9 @@ import {
   X,
   Wifi,
   WifiOff,
+  Trash2,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 
 interface DevUser {
@@ -23,9 +26,7 @@ interface DevUser {
   role: string;
 }
 
-// Only these roles may see the developer workspace.
 const ALLOWED_ROLES = ["DEVELOPER", "SUPER_ADMIN"];
-
 const BASE = "/portal/workspace";
 
 const navTabs = [
@@ -48,7 +49,12 @@ export default function WorkspaceLayout({
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
-  // Track network connectivity state for offline PWA operation
+  // Delete Account Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
   useEffect(() => {
     setIsOnline(navigator.onLine);
     const handleOnline = () => setIsOnline(true);
@@ -63,12 +69,10 @@ export default function WorkspaceLayout({
     };
   }, []);
 
-  // Verify the session. Any failure sends the user to login (fails closed unless offline with cached session).
   useEffect(() => {
     let cancelled = false;
 
     async function verifySession() {
-      // Check offline local storage cache first if offline
       if (!navigator.onLine) {
         const cachedUser = localStorage.getItem("mobase_dev_user");
         if (cachedUser) {
@@ -131,7 +135,50 @@ export default function WorkspaceLayout({
     }
   };
 
-  // Don't render any workspace content (or fire its API calls) until verified.
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      setDeleteError("Password is required to confirm account deletion.");
+      return;
+    }
+
+    setDeletingAccount(true);
+    setDeleteError("");
+
+    try {
+      // 1. Verify password endpoint
+      const verifyRes = await fetch("/api/auth/verify-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+
+      if (!verifyRes.ok && verifyRes.status !== 404) {
+        const errData = await verifyRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Incorrect password.");
+      }
+
+      // 2. Trigger permanent account purge API
+      const deleteRes = await fetch(
+        `/api/dev/account/delete?userId=${devUser?.id}`,
+        { method: "DELETE" },
+      );
+
+      if (!deleteRes.ok) {
+        const errData = await deleteRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to purge account.");
+      }
+
+      // 3. Clear local session & redirect to login
+      localStorage.removeItem("mobase_dev_user");
+      localStorage.clear();
+      router.replace("/portal/login");
+    } catch (err: any) {
+      setDeleteError(err.message || "An unexpected error occurred.");
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   if (!devUser) {
     return (
       <div className="min-h-screen w-full bg-[var(--bg-canvas)] flex items-center justify-center">
@@ -142,7 +189,6 @@ export default function WorkspaceLayout({
 
   return (
     <div className="min-h-screen w-full bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-300 relative">
-      {/* Offline Status Banner */}
       {!isOnline && (
         <div className="w-full bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-center text-xs font-mono text-amber-400 flex items-center justify-center gap-2">
           <WifiOff className="w-3.5 h-3.5" />
@@ -166,7 +212,6 @@ export default function WorkspaceLayout({
           </Link>
 
           <div className="flex items-center gap-3">
-            {/* Connection Badge */}
             <div
               title={isOnline ? "Online" : "Offline"}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono border ${
@@ -188,7 +233,6 @@ export default function WorkspaceLayout({
               )}
             </div>
 
-            {/* Floating Glassmorphic Vertical Navigation Menu Trigger */}
             <div className="relative">
               <button
                 onClick={() => setIsNavOpen((prev) => !prev)}
@@ -202,7 +246,6 @@ export default function WorkspaceLayout({
                 )}
               </button>
 
-              {/* Floating Vertical Glass Pill Menu */}
               {isNavOpen && (
                 <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 p-3 rounded-[32px] bg-[var(--bg-surface)]/80 backdrop-blur-xl border border-[var(--border-subtle)] shadow-2xl animate-fadeIn min-w-[76px]">
                   <div className="flex flex-col items-center gap-4 py-2 w-full">
@@ -268,6 +311,15 @@ export default function WorkspaceLayout({
               </div>
             </div>
 
+            {/* Delete Account Modal Trigger */}
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              title="Delete Account"
+              className="p-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+
             <button
               onClick={handleLogout}
               disabled={loggingOut}
@@ -283,6 +335,75 @@ export default function WorkspaceLayout({
       <main className="flex-1 w-full max-w-[1600px] mx-auto p-6 md:p-8">
         {children}
       </main>
+
+      {/* Delete Account Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[var(--bg-surface)] border border-red-500/30 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
+                  Delete Developer Account
+                </h3>
+                <span className="text-xs font-mono text-red-400 block">
+                  Action is permanent and irreversible
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              This will permanently purge your workspace, lead claims, active
+              client dossiers, and historical records from MoBase systems.
+              Please enter your password to authorize this action.
+            </p>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono uppercase text-[var(--text-muted)] block flex items-center gap-1">
+                <Lock className="w-3 h-3 text-[var(--accent-gold)]" /> Password
+                Confirmation
+              </label>
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Enter account password..."
+                className="w-full px-4 py-2.5 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeletePassword("");
+                  setDeleteError("");
+                }}
+                className="px-4 py-2 rounded-xl bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount || !deletePassword}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-mono text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md"
+              >
+                {deletingAccount ? "Purging Account..." : "Confirm Deletion"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

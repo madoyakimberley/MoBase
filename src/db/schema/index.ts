@@ -112,6 +112,7 @@ export const leads = mysqlTable(
     realPhoneNumber: varchar("real_phone_number", { length: 32 }), // SECURED / HIDDEN
     status: leadStatusEnum.default("UNCLAIMED").notNull(),
     hasWebsite: boolean("has_website").default(false).notNull(),
+    projectUrl: text("project_url"), // CLIENT DEPLOYED PROTOTYPE DEMO LINK
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
@@ -192,6 +193,7 @@ export const clients = mysqlTable(
     slug: varchar("slug", { length: 64 }).notNull(),
     businessType: varchar("business_type", { length: 64 }).notNull(),
     customDomain: varchar("custom_domain", { length: 255 }),
+    portalUrl: text("portal_url"), // CLIENT ESCROW & SETTLEMENT PORTAL LINK
     whatsappNumber: varchar("whatsapp_number", { length: 32 }).notNull(),
     logoUrl: text("logo_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -215,6 +217,7 @@ export const projects = mysqlTable(
     status: projectStatusEnum.default("IN_PROGRESS").notNull(),
     depositPaid: boolean("deposit_paid").default(false).notNull(),
     totalPriceKes: int("total_price_kes").default(20000).notNull(),
+    liveUrl: text("live_url"), // DEPLOYED LIVE APPLICATION LINK
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({
