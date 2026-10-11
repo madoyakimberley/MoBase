@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { spawn } from "child_process";
-import fs from "fs";
-import path from "path";
+import { Client } from "whatsapp-web.js";
+import { db } from "@/db";
+import { systemStatus } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { validateOrigin } from "@/lib/security";
 
-const LOCK_FILE = path.join(process.cwd(), ".whatsapp-worker.lock");
+export const maxDuration = 60; // Extend duration limit on Vercel
+
+const SESSION_ID = "whatsapp-session";
 
 export async function POST(req: Request) {
   try {
@@ -35,47 +38,90 @@ export async function POST(req: Request) {
       );
     }
 
-    // Lock check: Prevents duplicate workers from spawning concurrently
-    if (fs.existsSync(LOCK_FILE)) {
+    const browserlessKey = process.env.BROWSERLESS_API_KEY;
+
+    if (!browserlessKey) {
+      return NextResponse.json(
+        {
+          error:
+            "BROWSERLESS_API_KEY is missing in Vercel Environment Variables. Please set BROWSERLESS_API_KEY in Vercel Project Settings.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Check database lock status instead of local disk file
+    const [existing] = await db
+      .select({
+        isConnected: systemStatus.isConnected,
+        qrCode: systemStatus.qrCode,
+      })
+      .from(systemStatus)
+      .where(eq(systemStatus.id, SESSION_ID))
+      .limit(1);
+
+    if (existing?.isConnected) {
       return NextResponse.json({
         success: true,
-        message: "WhatsApp worker is already active.",
+        message: "WhatsApp worker is already active and connected.",
+        developerId: userId,
       });
     }
 
-    // Record single-instance lock file with developer session metadata
-    fs.writeFileSync(
-      LOCK_FILE,
-      JSON.stringify({
-        startedAt: new Date().toISOString(),
-        startedBy: userId,
-      }),
-    );
-
-    // Spawn worker as an unreferenced background child process
-    const child = spawn(
-      "npx",
-      ["tsx", "--env-file=.env.local", "server/whatsapp-worker.ts"],
-      {
-        detached: true,
-        stdio: "ignore",
-        cwd: process.cwd(),
+    // Connect Puppeteer directly to Browserless Cloud WebSocket
+    const client = new Client({
+      puppeteer: {
+        browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessKey}`,
       },
-    );
+    });
 
-    child.unref();
+    client.on("qr", async (qr) => {
+      try {
+        await db
+          .insert(systemStatus)
+          .values({
+            id: SESSION_ID,
+            qrCode: qr,
+            isConnected: false,
+            updatedAt: new Date(),
+          })
+          .onDuplicateKeyUpdate({
+            set: { qrCode: qr, isConnected: false, updatedAt: new Date() },
+          });
+      } catch (err) {
+        console.error("Failed to write QR code to database:", err);
+      }
+    });
+
+    client.on("ready", async () => {
+      try {
+        await db
+          .insert(systemStatus)
+          .values({
+            id: SESSION_ID,
+            qrCode: null,
+            isConnected: true,
+            updatedAt: new Date(),
+          })
+          .onDuplicateKeyUpdate({
+            set: { qrCode: null, isConnected: true, updatedAt: new Date() },
+          });
+      } catch (err) {
+        console.error("Failed to write connected state to database:", err);
+      }
+    });
+
+    // Fire initialization asynchronously without stalling HTTP response
+    client.initialize().catch((err) => {
+      console.error("Failed to initialize remote WhatsApp client:", err);
+    });
 
     return NextResponse.json({
       success: true,
-      message: "WhatsApp worker spawned successfully.",
+      message: "Remote WhatsApp worker spawned via Browserless.io.",
       developerId: userId,
     });
   } catch (error: any) {
-    if (fs.existsSync(LOCK_FILE)) {
-      try {
-        fs.unlinkSync(LOCK_FILE);
-      } catch {}
-    }
     return NextResponse.json(
       { error: error.message || "Failed to boot WhatsApp worker." },
       { status: 500 },
