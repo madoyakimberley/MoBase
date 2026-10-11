@@ -1,12 +1,4 @@
 {
-  "version": 2,
-  "framework": "nextjs",
-  "functions": {
-    "api/**/*": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/whatsapp-outbox",

@@ -1,0 +1,7 @@
+// src/app/api/cron/whatsapp-outbox/route.ts
+export const maxDuration = 60; // 60 seconds duration on Vercel
+
+export async function GET() {
+  // Outbox dispatch logic
+  return Response.json({ success: true });
+}
