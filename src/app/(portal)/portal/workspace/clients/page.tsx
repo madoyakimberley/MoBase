@@ -1,61 +1,75 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, ShieldCheck, ChevronRight } from "lucide-react";
+import {
+  Search,
+  ShieldCheck,
+  ChevronRight,
+  MessageSquare,
+  Phone,
+  Globe,
+  UserCheck,
+} from "lucide-react";
 import { ClientDetails, ClientDetailsData } from "./components/ClientDetails";
-import { TierConfirmation } from "./components/TierConfirmation";
 import { ChatWall } from "./components/ChatWall";
 import { ChatDrawer } from "../find-jobs/components/ChatDrawer";
 import { Lead } from "../find-jobs/components/types";
 
 export interface ClientRecord extends ClientDetailsData {
   status: "CLAIMED" | "CONTACTED" | "CONVERTED" | "ARCHIVED";
-  claimedAt: string;
-  maskedPhone: string;
-  rawPhone: string;
-  amountLabel?: string;
-  badgeLabel?: string;
-  badgeStyle?: string;
-  principalName?: string;
+  claimedAt?: string;
+  maskedPhone?: string;
+  phone?: string;
+  realPhoneNumber?: string;
+  category?: string;
+  city?: string;
+  reviewsCount?: number;
+  hasWebsite?: boolean;
 }
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState("All Commissions");
+  const [activeFilter, setActiveFilter] = useState("All Clients");
   const [selectedClient, setSelectedClient] = useState<ClientRecord | null>(
     null,
   );
   const [activeChatLead, setActiveChatLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Load claimed client records
+  // Fetch real claimed/contacted clients from database
   const loadClaimedClients = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/dev/leads/claimed");
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        if (Array.isArray(data.leads) && data.leads.length > 0) {
+        if (Array.isArray(data.leads)) {
           setClients(data.leads);
-          if (!selectedClient && data.leads.length > 0) {
+          if (data.leads.length > 0 && !selectedClient) {
             setSelectedClient(data.leads[0]);
           }
           setLoading(false);
           return;
         }
       }
-    } catch {
-      // Offline fallback
+    } catch (err) {
+      console.error("Failed to fetch clients from API:", err);
     }
 
+    // Offline cache fallback
     try {
       const cached = localStorage.getItem("mobase_cached_leads");
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setClients(parsed);
-          if (!selectedClient) setSelectedClient(parsed[0]);
+        if (Array.isArray(parsed)) {
+          const claimedOnly = parsed.filter(
+            (l: any) => l.status !== "UNCLAIMED",
+          );
+          setClients(claimedOnly);
+          if (claimedOnly.length > 0 && !selectedClient) {
+            setSelectedClient(claimedOnly[0]);
+          }
         }
       }
     } catch {
@@ -80,170 +94,161 @@ export default function ClientsPage() {
     localStorage.setItem("mobase_cached_leads", JSON.stringify(updatedList));
   };
 
-  const handleOpenChat = (lead: Lead) => {
-    setActiveChatLead(lead);
-  };
-
-  // Safe lead mapper eliminating inline object type errors
+  // Convert ClientRecord to Lead for ChatDrawer
   const getActiveLead = (client: ClientRecord): Lead => {
     return {
       id: client.id,
       name: client.name,
-      category: client.category || "General",
-      niche: client.category || "General",
-      city: "Nairobi",
-      maskedPhone: client.maskedPhone || "Masked Contact",
-      rawPhone: client.rawPhone || "",
+      category: client.category || "Local Business",
+      niche: client.category || "Local Business",
+      city: client.city || "Kenya",
+      maskedPhone: client.maskedPhone || client.phone || "Masked Contact",
+      rawPhone: client.realPhoneNumber || client.phone || "",
       reviewsCount: client.reviewsCount || 0,
       hasWebsite: client.hasWebsite ?? false,
       status: client.status === "CLAIMED" ? "CLAIMED" : "CONTACTED",
     } as unknown as Lead;
   };
 
+  // Dynamic metrics calculations
+  const totalClients = clients.length;
+  const contactedCount = clients.filter((c) => c.status === "CONTACTED").length;
+  const claimedCount = clients.filter((c) => c.status === "CLAIMED").length;
+  const convertedCount = clients.filter((c) => c.status === "CONVERTED").length;
+
+  // Filter clients dynamically
+  const filteredClients = clients.filter((client) => {
+    const matchesSearch =
+      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (client.category || "").toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (activeFilter === "Claimed") return client.status === "CLAIMED";
+    if (activeFilter === "Contacted") return client.status === "CONTACTED";
+    if (activeFilter === "Converted") return client.status === "CONVERTED";
+    return true;
+  });
+
   return (
     <div className="space-y-8 animate-fadeIn max-w-[1700px] mx-auto pb-16">
-      {/* Editorial Header */}
+      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-[var(--border-glass)] pb-6">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-[10px] font-mono tracking-widest uppercase text-[var(--accent-gold)] font-bold">
-            <span>🛡️ PRIVATE CLIENT CONCIERGE</span>
+            <span>🛡️ DEVELOPER WORKSPACE</span>
             <span>•</span>
-            <span>FISCAL LEDGER</span>
+            <span>CLIENT DIRECTORY</span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl font-bold text-[var(--text-primary)] tracking-tight">
-            Client Dossiers{" "}
+            Active Clients{" "}
             <span className="italic font-normal text-[var(--accent-gold)]">
               &
             </span>{" "}
-            Financial Wall
+            Live Outreach
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="px-4 py-2.5 rounded-xl bg-[var(--bg-surface-elevated)] hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-glass)] text-xs font-mono font-medium transition-colors cursor-pointer flex items-center gap-2"
-          >
-            <span>📡 Initiate Broadcast</span>
-          </button>
-          <button
-            type="button"
-            className="px-5 py-2.5 rounded-xl bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-mono text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2"
-          >
-            <span>📜 Issue Invoice & Settlement Link</span>
-          </button>
-        </div>
+        <button
+          onClick={loadClaimedClients}
+          className="px-4 py-2.5 rounded-xl bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-mono text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2 self-start lg:self-auto"
+        >
+          <span>🔄 Sync Database Clients</span>
+        </button>
       </div>
 
-      {/* 4-Card Summary Metrics Grid */}
+      {/* Dynamic Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
-            <span className="uppercase font-semibold">ACTIVE ENGAGEMENTS</span>
-            <span className="text-[var(--accent-gold)]">🛡️</span>
+            <span className="uppercase font-semibold">
+              TOTAL MANAGED CLIENTS
+            </span>
+            <UserCheck className="w-4 h-4 text-[var(--accent-gold)]" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-serif text-3xl font-bold text-[var(--text-primary)]">
-              18
+              {totalClients}
             </span>
             <span className="text-xs font-mono text-emerald-400">
-              +2 this quarter
+              Active in DB
             </span>
           </div>
-          <div className="pt-2 border-t border-[var(--border-glass)] flex justify-between text-[11px] font-mono text-[var(--text-secondary)]">
-            <span>Atelier Commissions</span>
-            <span className="text-[var(--text-primary)] font-bold">
-              100% Retained
-            </span>
+          <div className="pt-2 border-t border-[var(--border-glass)] text-[11px] font-mono text-[var(--text-secondary)]">
+            Claimed or contacted leads
           </div>
         </div>
 
         <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
-            <span className="uppercase font-semibold">PENDING SETTLEMENTS</span>
-            <span className="text-[var(--accent-gold)]">📂</span>
+            <span className="uppercase font-semibold">PENDING OUTREACH</span>
+            <Phone className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-serif text-3xl font-bold text-amber-400">
+              {claimedCount}
+            </span>
+            <span className="text-xs font-mono text-[var(--text-muted)]">
+              Leads
+            </span>
+          </div>
+          <div className="pt-2 border-t border-[var(--border-glass)] text-[11px] font-mono text-[var(--text-secondary)]">
+            Claimed, awaiting initial message
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
+          <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
+            <span className="uppercase font-semibold">CONTACTED CLIENTS</span>
+            <MessageSquare className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-serif text-3xl font-bold text-emerald-400">
+              {contactedCount}
+            </span>
+            <span className="text-xs font-mono text-[var(--text-muted)]">
+              Leads
+            </span>
+          </div>
+          <div className="pt-2 border-t border-[var(--border-glass)] text-[11px] font-mono text-[var(--text-secondary)]">
+            WhatsApp conversations opened
+          </div>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
+          <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
+            <span className="uppercase font-semibold">CONVERTED JOBS</span>
+            <Globe className="w-4 h-4 text-[var(--accent-gold)]" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-serif text-3xl font-bold text-[var(--accent-gold)]">
-              $428,500
+              {convertedCount}
             </span>
             <span className="text-xs font-mono text-[var(--text-muted)]">
-              USD
+              Clients
             </span>
           </div>
-          <div className="pt-2 border-t border-[var(--border-glass)] flex justify-between text-[11px] font-mono text-[var(--text-secondary)]">
-            <span>3 Milestones Active</span>
-            <span className="text-[var(--text-primary)] font-bold">
-              Net-15 Cycle
-            </span>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
-          <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
-            <span className="uppercase font-semibold">DISPUTED / ESCROW</span>
-            <span className="text-[var(--text-muted)]">🔒</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-serif text-3xl font-bold text-[var(--text-primary)]">
-              $92,000
-            </span>
-            <span className="text-xs font-mono text-[var(--text-muted)]">
-              USD
-            </span>
-          </div>
-          <div className="pt-2 border-t border-[var(--border-glass)] flex justify-between text-[11px] font-mono text-[var(--text-secondary)]">
-            <span>Milestone Hold</span>
-            <span className="text-[var(--accent-gold)] font-bold">
-              Smart Vault
-            </span>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
-          <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
-            <span className="uppercase font-semibold">WALL TRANSMISSIONS</span>
-            <span className="text-[var(--accent-gold)]">💬</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-serif text-3xl font-bold text-[var(--text-primary)]">
-              5
-            </span>
-            <span className="text-xs font-mono text-amber-400">
-              Unread Dispatches
-            </span>
-          </div>
-          <div className="pt-2 border-t border-[var(--border-glass)] flex justify-between text-[11px] font-mono text-[var(--text-secondary)]">
-            <span>Client Inquiries</span>
-            <span className="text-red-400 font-bold">2 Urgent Action</span>
+          <div className="pt-2 border-t border-[var(--border-glass)] text-[11px] font-mono text-[var(--text-secondary)]">
+            Active website deployments
           </div>
         </div>
       </div>
 
-      {/* Filter Pill Navigation Bar */}
+      {/* Filter Navigation Bar */}
       <div className="p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="relative w-full md:w-64">
+        <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter by mail..."
-            className="w-full pl-10 pr-8 py-2 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-gold)] font-mono"
+            placeholder="Search by client name or niche..."
+            className="w-full pl-10 pr-4 py-2 bg-[var(--bg-canvas)] border border-[var(--border-glass)] rounded-xl text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-gold)] font-mono"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[var(--text-muted)]">
-            ⌘K
-          </span>
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto text-xs font-mono">
-          {[
-            "All Commissions",
-            "Pending Payment",
-            "Under Review",
-            "Retainer Active",
-            "VIP Maison",
-          ].map((pill) => (
+          {["All Clients", "Claimed", "Contacted", "Converted"].map((pill) => (
             <button
               key={pill}
               type="button"
@@ -260,35 +265,29 @@ export default function ClientsPage() {
         </div>
       </div>
 
-      {/* Main Two-Column Layout */}
+      {/* Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Private Client Roster */}
+        {/* Left: Client Roster */}
         <div className="lg:col-span-5 space-y-4">
           <div className="flex items-center justify-between px-1 text-xs font-mono text-[var(--text-muted)]">
             <span className="uppercase font-semibold tracking-wider">
-              PRIVATE CLIENT ROSTER
-            </span>
-            <span>
-              <strong className="text-[var(--accent-gold)]">
-                {clients.length} Selected
-              </strong>{" "}
-              • Sorted by settlement urgency
+              CLIENT ROSTER ({filteredClients.length})
             </span>
           </div>
 
           {loading ? (
-            <div className="p-8 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-mono text-[var(--text-muted)]">
-              Loading client dossiers...
+            <div className="p-8 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs font-mono text-[var(--text-muted)] animate-pulse">
+              Loading client database records...
             </div>
-          ) : clients.length === 0 ? (
+          ) : filteredClients.length === 0 ? (
             <div className="p-12 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
-              <span className="text-3xl">🏛️</span>
+              <span className="text-3xl">📋</span>
               <p className="text-xs font-mono text-[var(--text-secondary)]">
-                No client dossiers found.
+                No clients match your filter.
               </p>
             </div>
           ) : (
-            clients.map((client) => {
+            filteredClients.map((client) => {
               const isSelected = selectedClient?.id === client.id;
               return (
                 <div
@@ -306,7 +305,7 @@ export default function ClientsPage() {
                         {client.name}
                       </h3>
                       <p className="text-xs font-mono text-[var(--text-muted)]">
-                        {client.category}
+                        {client.category || "Local Business"}
                       </p>
                     </div>
 
@@ -314,40 +313,23 @@ export default function ClientsPage() {
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${
                         client.status === "CLAIMED"
                           ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                          : client.status === "CONVERTED"
+                          : client.status === "CONTACTED"
                             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                            : "bg-red-950/40 border-red-800/40 text-red-400"
+                            : "bg-blue-500/10 border-blue-500/20 text-blue-400"
                       }`}
                     >
-                      {client.badgeLabel || client.status}
+                      {client.status}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--border-glass)] text-xs font-mono">
-                    <div>
-                      <span className="text-[10px] uppercase text-[var(--text-muted)] block">
-                        COMMISSION
-                      </span>
-                      <span className="text-[var(--text-primary)] font-semibold truncate block">
-                        {client.category}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase text-[var(--text-muted)] block">
-                        PRINCIPAL
-                      </span>
-                      <span className="text-[var(--text-primary)] font-semibold truncate block">
-                        {client.principalName || "Alistair Vartanian"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs font-mono pt-1">
-                    <span className="text-[var(--accent-gold)] font-bold">
-                      {client.amountLabel || "$185,000.00 USD pending"}
+                  <div className="flex items-center justify-between text-xs font-mono pt-2 border-t border-[var(--border-glass)]">
+                    <span className="text-[var(--text-secondary)]">
+                      {client.maskedPhone ||
+                        client.phone ||
+                        "Contact Protected"}
                     </span>
                     <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
-                      ACTIVE DOSSIER{" "}
+                      VIEW DETAILS{" "}
                       <ChevronRight className="w-3 h-3 text-[var(--accent-gold)]" />
                     </span>
                   </div>
@@ -355,27 +337,9 @@ export default function ClientsPage() {
               );
             })
           )}
-
-          {/* Bottom Security Consensus Badge */}
-          <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center gap-3 text-xs font-mono">
-            <div className="p-2.5 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-glass)] text-[var(--accent-gold)] shrink-0">
-              🛡️
-            </div>
-            <div className="flex-1">
-              <span className="font-bold text-[var(--text-primary)] block">
-                Client Identity Verification
-              </span>
-              <span className="text-[11px] text-[var(--text-muted)] block">
-                Consensus: Multi-Sig Biometric Passed
-              </span>
-            </div>
-            <span className="text-emerald-400 font-bold font-serif text-sm">
-              99.8% TRUST
-            </span>
-          </div>
         </div>
 
-        {/* Right Column: Selected Client Dossier & Financial Wall */}
+        {/* Right: Selected Client Details & Live Chat Stream */}
         <div className="lg:col-span-7 space-y-6">
           {selectedClient ? (
             <>
@@ -383,18 +347,17 @@ export default function ClientsPage() {
                 client={selectedClient}
                 onUpdateClient={handleUpdateClient}
               />
-              <TierConfirmation />
               <ChatWall
                 activeLead={getActiveLead(selectedClient)}
-                onOpenChat={handleOpenChat}
+                onOpenChat={(lead) => setActiveChatLead(lead)}
               />
             </>
           ) : (
             <div className="p-16 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
               <ShieldCheck className="w-12 h-12 mx-auto text-[var(--accent-gold)] opacity-70" />
               <p className="text-xs font-mono text-[var(--text-secondary)]">
-                Select a private client roster item on the left to inspect
-                executive dossiers, settlement gates, and direct dispatches.
+                Select a client on the left to inspect details and live WhatsApp
+                messages.
               </p>
             </div>
           )}

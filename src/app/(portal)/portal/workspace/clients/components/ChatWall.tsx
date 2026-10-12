@@ -1,15 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Lock,
   Send,
-  Download,
-  Paperclip,
-  Shield,
-  CheckCheck,
+  RefreshCw,
+  MessageSquare,
+  Check,
+  Clock,
 } from "lucide-react";
 import { Lead } from "../../find-jobs/components/types";
+
+interface MessageRecord {
+  id: string;
+  senderType: "DEVELOPER" | "CLIENT";
+  messageText: string;
+  status: "PENDING" | "SENT" | "DELIVERED" | "FAILED";
+  createdAt: string;
+}
 
 interface ChatWallProps {
   activeLead: Lead;
@@ -17,95 +25,138 @@ interface ChatWallProps {
 }
 
 export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
+  const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [messageInput, setMessageInput] = useState("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [sending, setSending] = useState<boolean>(false);
+
+  // Fetch real database messages for this lead
+  const fetchMessages = async () => {
+    try {
+      const res = await fetch(`/api/dev/messages?leadId=${activeLead.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages || []);
+      }
+    } catch (err) {
+      console.error("Error fetching lead messages:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000); // Poll every 3 seconds for new replies
+    return () => clearInterval(interval);
+  }, [activeLead.id]);
+
+  // Post message directly to WhatsApp Outbox queue in TiDB
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || sending) return;
+
+    setSending(true);
+    try {
+      const res = await fetch("/api/dev/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: activeLead.id,
+          messageText: messageInput.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        setMessageInput("");
+        await fetchMessages(); // Immediate refresh
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || "Failed to send message to outbox queue.");
+      }
+    } catch (err) {
+      console.error("Failed to post message:", err);
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--border-glass)] pb-4">
         <div className="flex items-center gap-2">
-          <span className="text-lg">💬</span>
+          <MessageSquare className="w-5 h-5 text-[var(--accent-gold)]" />
           <h3 className="font-serif text-lg font-bold text-[var(--text-primary)]">
-            Client Chat Wall • Direct Principal Dispatch
+            Live Chat Wall • {activeLead.name}
           </h3>
         </div>
-        <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold flex items-center gap-1.5">
-          <Lock className="w-3 h-3" /> ENCRYPTED SESSION ACTIVE
-        </span>
+        <button
+          onClick={fetchMessages}
+          className="p-1.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-glass)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          title="Refresh Messages"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+          />
+        </button>
       </div>
 
-      {/* Message Stream */}
-      <div className="space-y-4">
-        {/* Message Bubble 1 - Client */}
-        <div className="p-4 rounded-2xl bg-[var(--bg-surface-elevated)] border border-[var(--border-glass)] space-y-2">
-          <div className="flex items-center justify-between font-mono text-xs text-[var(--text-muted)]">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-glass)] text-[var(--accent-gold)] font-bold flex items-center justify-center text-xs">
-                AV
-              </div>
-              <span className="font-bold text-[var(--text-primary)]">
-                Alistair Vartanian
-              </span>
-              <span>CEO MAISON VARTANIAN</span>
-            </div>
-            <span>10:42 AM</span>
+      {/* Dynamic Message Stream */}
+      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+        {loading && messages.length === 0 ? (
+          <div className="p-8 text-center text-xs font-mono text-[var(--text-muted)]">
+            Syncing live WhatsApp messages...
           </div>
-
-          <p className="text-xs font-sans text-[var(--text-secondary)] leading-relaxed pl-9">
-            The photogrammetry renders for the Geneva salon look extraordinary.
-            However, our treasury is requesting the updated VAT breakdown before
-            releasing the milestone tranche of $185,000.
-          </p>
-
-          <div className="text-[10px] font-mono text-[var(--text-muted)] pl-9">
-            Delivered via Vartanian Family Office Vault Channel
+        ) : messages.length === 0 ? (
+          <div className="p-8 text-center rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-glass)] text-xs font-mono text-[var(--text-muted)] space-y-1">
+            <p>No messages sent yet to {activeLead.name}.</p>
+            <p className="text-[10px]">
+              Type a message below to dispatch via WhatsApp.
+            </p>
           </div>
-        </div>
+        ) : (
+          messages.map((msg) => {
+            const isDev = msg.senderType === "DEVELOPER";
+            return (
+              <div
+                key={msg.id}
+                className={`p-4 rounded-2xl text-xs space-y-1 ${
+                  isDev
+                    ? "bg-[var(--accent-gold)] text-[var(--bg-canvas)] ml-8 shadow-sm"
+                    : "bg-[var(--bg-surface-elevated)] border border-[var(--border-glass)] text-[var(--text-primary)] mr-8"
+                }`}
+              >
+                <div className="flex items-center justify-between font-mono text-[10px] opacity-80">
+                  <span className="font-bold">
+                    {isDev ? "DEVELOPER (You)" : activeLead.name}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span>
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    {isDev &&
+                      (msg.status === "PENDING" ? (
+                        <span title="In Outbox Queue">
+                          <Clock className="w-3 h-3 text-amber-900" />
+                        </span>
+                      ) : (
+                        <span title="Dispatched">
+                          <Check className="w-3 h-3 text-emerald-950" />
+                        </span>
+                      ))}
+                  </div>
+                </div>
 
-        {/* Message Bubble 2 - Partner Gold Highlighting */}
-        <div className="p-4 rounded-2xl bg-[var(--accent-gold)] text-[var(--bg-canvas)] space-y-3 shadow-md">
-          <div className="flex items-center justify-between font-mono text-xs opacity-90">
-            <span>11:15 AM</span>
-            <div className="flex items-center gap-2">
-              <span className="font-bold uppercase tracking-wider">
-                PARTNER MOBASE ATELIER
-              </span>
-              <span className="font-semibold">Eleonora Castiglione</span>
-              <div className="w-7 h-7 rounded-lg bg-[var(--bg-canvas)] text-[var(--accent-gold)] font-bold flex items-center justify-center text-xs">
-                EC
+                <p className="font-sans leading-relaxed text-xs">
+                  {msg.messageText}
+                </p>
               </div>
-            </div>
-          </div>
-
-          <p className="text-xs font-sans font-medium leading-relaxed">
-            We have attached the updated Swiss Federal Tax Administration VAT
-            annex below. The cryptographic receipt has been pushed to your
-            portal escrow.
-          </p>
-
-          {/* Attachment Pill */}
-          <div className="p-3 rounded-xl bg-[var(--bg-canvas)] text-[var(--text-primary)] border border-[var(--border-glass)] flex items-center justify-between text-xs font-mono">
-            <div className="flex items-center gap-2.5 truncate">
-              <div className="p-2 rounded-lg bg-[var(--bg-surface-elevated)] text-[var(--accent-gold)] shrink-0">
-                📄
-              </div>
-              <div className="truncate">
-                <span className="font-bold block truncate">
-                  MoBase-Inv-2025-098_VAT_Annotated.pdf
-                </span>
-                <span className="text-[10px] text-[var(--text-muted)] block">
-                  2.4 MB • SHA-256 Verified
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="p-2 rounded-lg hover:bg-[var(--bg-surface-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer shrink-0"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+            );
+          })
+        )}
       </div>
 
       {/* Message Composer */}
@@ -113,43 +164,35 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
         <textarea
           value={messageInput}
           onChange={(e) => setMessageInput(e.target.value)}
-          placeholder={`Post a secure transmission to ${activeLead.name} executive wall...`}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          placeholder={`Type message to ${activeLead.name}... (Press Enter to send)`}
           rows={3}
           className="w-full bg-transparent text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none resize-none font-sans"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[var(--border-glass)] text-xs font-mono">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-glass)] flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Paperclip className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-              <span>Attach Document / CAD</span>
-            </button>
-            <button
-              type="button"
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-elevated)] hover:bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-glass)] flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Private Atelier Note</span>
-            </button>
-          </div>
+        <div className="flex items-center justify-between pt-2 border-t border-[var(--border-glass)] text-xs font-mono">
+          <button
+            type="button"
+            onClick={() => onOpenChat(activeLead)}
+            className="text-[10px] text-[var(--accent-gold)] hover:underline flex items-center gap-1"
+          >
+            <span>Open WhatsApp Drawer View</span>
+          </button>
 
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] text-[var(--text-muted)] hidden sm:inline-flex items-center gap-1">
-              <Shield className="w-3 h-3 text-emerald-400" /> End-to-End
-              Encrypted
-            </span>
-            <button
-              type="button"
-              onClick={() => onOpenChat(activeLead)}
-              className="px-4 py-2 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-sm"
-            >
-              <span>Post to Client Wall</span>
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSendMessage}
+            disabled={sending || !messageInput.trim()}
+            className="px-5 py-2 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2 shadow-sm"
+          >
+            <span>{sending ? "Queueing..." : "Send to WhatsApp"}</span>
+            <Send className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>

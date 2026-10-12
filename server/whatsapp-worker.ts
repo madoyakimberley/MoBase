@@ -1,11 +1,13 @@
 import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+dotenv.config();
+
+import http from "http";
 import { Client, Message } from "whatsapp-web.js";
 import * as qrcode from "qrcode-terminal";
 import { db } from "../src/db";
 import { leads, messages, systemStatus } from "../src/db/schema";
 import { eq, or, and } from "drizzle-orm";
-
-dotenv.config();
 
 const SESSION_ID = "whatsapp-session";
 const BROWSERLESS_KEY = process.env.BROWSERLESS_API_KEY;
@@ -15,14 +17,46 @@ if (!BROWSERLESS_KEY) {
   process.exit(1);
 }
 
-// Connect persistent Node process to Browserless Cloud Chrome
+// --------------------------------------------------------------------------
+// 1. Embedded HTTP Health Check Server (Keeps Render Instance Awake)
+// --------------------------------------------------------------------------
+const PORT = process.env.PORT || 3000;
+
+http
+  .createServer((req, res) => {
+    if (req.url === "/health" || req.url === "/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: "online",
+          service: "MoBase WhatsApp Cloud Worker",
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  })
+  .listen(PORT, () => {
+    console.log(`[KEEP-ALIVE] HTTP server active on port ${PORT}`);
+  });
+
+// --------------------------------------------------------------------------
+// 2. WhatsApp Web Client over Browserless.io
+// --------------------------------------------------------------------------
 const client = new Client({
   puppeteer: {
     browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_KEY}`,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    ],
   },
 });
 
-// 1. Sync QR Code to Terminal & Database
+// QR Code Event Listener
 client.on("qr", async (qr: string) => {
   console.log("\nScan this QR code with WhatsApp on your phone:\n");
   qrcode.generate(qr, { small: true });
@@ -45,7 +79,7 @@ client.on("qr", async (qr: string) => {
   }
 });
 
-// 2. Scan Success Handshake
+// Session Ready Event Listener
 client.on("ready", async () => {
   console.log("✅ WhatsApp Web session active and ready!");
 
@@ -69,7 +103,7 @@ client.on("ready", async () => {
   startOutboxPolling();
 });
 
-// 3. Inbound Interceptor
+// Inbound Message Handler
 client.on("message", async (msg: Message) => {
   if (
     msg.fromMe ||
@@ -108,54 +142,67 @@ client.on("message", async (msg: Message) => {
   }
 });
 
-// 4. Outbound Outbox Queue
-function startOutboxPolling(): void {
-  setInterval(async () => {
-    try {
-      const pendingMessages = await db
-        .select({
-          id: messages.id,
-          leadId: messages.leadId,
-          messageText: messages.messageText,
-          phone: leads.phone,
-          maskedPhone: leads.maskedPhone,
-          realPhoneNumber: leads.realPhoneNumber,
-        })
-        .from(messages)
-        .innerJoin(leads, eq(messages.leadId, leads.id))
-        .where(
-          and(
-            eq(messages.senderType, "DEVELOPER"),
-            eq(messages.status, "PENDING"),
-          ),
-        )
-        .limit(5);
+// --------------------------------------------------------------------------
+// 3. Resilient Non-Overlapping Outbound Poller
+// --------------------------------------------------------------------------
+let isPolling = false;
 
-      for (const msg of pendingMessages) {
-        const rawPhone =
-          msg.phone || msg.realPhoneNumber || msg.maskedPhone || "";
-        const targetPhone = rawPhone.replace(/\D/g, "");
+async function pollOutboxQueue(): Promise<void> {
+  if (isPolling) return;
+  isPolling = true;
 
-        if (!targetPhone) continue;
+  try {
+    const pendingMessages = await db
+      .select({
+        id: messages.id,
+        leadId: messages.leadId,
+        messageText: messages.messageText,
+        phone: leads.phone,
+        maskedPhone: leads.maskedPhone,
+        realPhoneNumber: leads.realPhoneNumber,
+      })
+      .from(messages)
+      .innerJoin(leads, eq(messages.leadId, leads.id))
+      .where(
+        and(
+          eq(messages.senderType, "DEVELOPER"),
+          eq(messages.status, "PENDING"),
+        ),
+      )
+      .limit(5);
 
-        await client.sendMessage(`${targetPhone}@c.us`, msg.messageText);
+    for (const msg of pendingMessages) {
+      const rawPhone =
+        msg.phone || msg.realPhoneNumber || msg.maskedPhone || "";
+      const targetPhone = rawPhone.replace(/\D/g, "");
 
-        await db
-          .update(messages)
-          .set({ status: "SENT" })
-          .where(eq(messages.id, msg.id));
+      if (!targetPhone) continue;
 
-        await db
-          .update(leads)
-          .set({ status: "CONTACTED" })
-          .where(eq(leads.id, msg.leadId));
+      await client.sendMessage(`${targetPhone}@c.us`, msg.messageText);
 
-        console.log(`[OUTBOUND] Sent message to +${targetPhone}`);
-      }
-    } catch (err) {
-      console.error("Error processing outbox queue:", err);
+      await db
+        .update(messages)
+        .set({ status: "SENT" })
+        .where(eq(messages.id, msg.id));
+
+      await db
+        .update(leads)
+        .set({ status: "CONTACTED" })
+        .where(eq(leads.id, msg.leadId));
+
+      console.log(`[OUTBOUND] Dispatched message to +${targetPhone}`);
     }
-  }, 3000);
+  } catch (err: any) {
+    console.error("[OUTBOX POLL NOTICE]:", err?.message || err);
+  } finally {
+    isPolling = false;
+    setTimeout(pollOutboxQueue, 5000);
+  }
+}
+
+function startOutboxPolling(): void {
+  console.log("[OUTBOX] Starting resilient outbox queue poller...");
+  pollOutboxQueue();
 }
 
 client.initialize();

@@ -15,17 +15,17 @@ const globalForDb = globalThis as unknown as {
 const poolConnection =
   globalForDb.conn ??
   mysql.createPool({
-    uri: connectionString, // Retain full connection string including parameters
+    uri: connectionString,
     waitForConnections: true,
     connectionLimit: 10,
-    maxIdle: 10, // Maintain active idle connections in the pool
-    idleTimeout: 60000, // Evict dead idle connections after 60s
+    maxIdle: 10,
+    idleTimeout: 60000,
     queueLimit: 0,
     enableKeepAlive: true,
-    keepAliveInitialDelay: 10000, // Send TCP keep-alive probes after 10s of inactivity
-    connectTimeout: 10000, // Fail fast after 10s rather than hanging for 110s
+    keepAliveInitialDelay: 10000,
+    connectTimeout: 10000,
     ssl: {
-      rejectUnauthorized: process.env.NODE_ENV === "production", // Flexible SSL verification
+      rejectUnauthorized: process.env.NODE_ENV === "production",
     },
   });
 
