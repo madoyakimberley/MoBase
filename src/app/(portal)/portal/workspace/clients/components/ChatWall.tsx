@@ -1,14 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Lock,
-  Send,
-  RefreshCw,
-  MessageSquare,
-  Check,
-  Clock,
-} from "lucide-react";
+import { Send, RefreshCw, MessageSquare, Check, Clock } from "lucide-react";
 import { Lead } from "../../find-jobs/components/types";
 
 interface MessageRecord {
@@ -30,7 +23,6 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
   const [loading, setLoading] = useState<boolean>(true);
   const [sending, setSending] = useState<boolean>(false);
 
-  // Fetch real database messages for this lead
   const fetchMessages = async () => {
     try {
       const res = await fetch(`/api/dev/messages?leadId=${activeLead.id}`);
@@ -47,11 +39,10 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
 
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 3000); // Poll every 3 seconds for new replies
+    const interval = setInterval(fetchMessages, 3000);
     return () => clearInterval(interval);
   }, [activeLead.id]);
 
-  // Post message directly to WhatsApp Outbox queue in TiDB
   const handleSendMessage = async () => {
     if (!messageInput.trim() || sending) return;
 
@@ -68,7 +59,7 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
 
       if (res.ok) {
         setMessageInput("");
-        await fetchMessages(); // Immediate refresh
+        await fetchMessages();
       } else {
         const errData = await res.json().catch(() => ({}));
         alert(errData.error || "Failed to send message to outbox queue.");
@@ -82,7 +73,6 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
 
   return (
     <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--border-glass)] pb-4">
         <div className="flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-[var(--accent-gold)]" />
@@ -93,7 +83,6 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
         <button
           onClick={fetchMessages}
           className="p-1.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-glass)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          title="Refresh Messages"
         >
           <RefreshCw
             className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
@@ -101,7 +90,6 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
         </button>
       </div>
 
-      {/* Dynamic Message Stream */}
       <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
         {loading && messages.length === 0 ? (
           <div className="p-8 text-center text-xs font-mono text-[var(--text-muted)]">
@@ -159,7 +147,6 @@ export function ChatWall({ activeLead, onOpenChat }: ChatWallProps) {
         )}
       </div>
 
-      {/* Message Composer */}
       <div className="p-4 rounded-2xl bg-[var(--bg-canvas)] border border-[var(--border-glass)] space-y-3">
         <textarea
           value={messageInput}

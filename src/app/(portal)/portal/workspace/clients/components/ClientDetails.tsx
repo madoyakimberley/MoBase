@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import {
-  Download,
   Globe,
   ExternalLink,
   Edit2,
   Check,
   X,
   CheckCircle2,
-  Phone,
 } from "lucide-react";
 
 export interface ClientDetailsData {
@@ -83,7 +81,6 @@ export function ClientDetails({ client, onUpdateClient }: ClientDetailsProps) {
 
   return (
     <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-6">
-      {/* Header Box */}
       <div className="flex items-start justify-between gap-4 border-b border-[var(--border-glass)] pb-5">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] text-[var(--accent-gold)] font-mono font-bold flex items-center justify-center text-base shrink-0">
@@ -104,7 +101,6 @@ export function ClientDetails({ client, onUpdateClient }: ClientDetailsProps) {
         </div>
       </div>
 
-      {/* Deployed Live URL Box */}
       <div className="p-4 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-glass)] space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono tracking-wider uppercase text-[var(--accent-gold)] font-bold flex items-center gap-1">
@@ -171,7 +167,6 @@ export function ClientDetails({ client, onUpdateClient }: ClientDetailsProps) {
         )}
       </div>
 
-      {/* Dynamic Metadata Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-1 font-mono text-xs">
         <div className="space-y-1">
           <span className="text-[10px] tracking-wider uppercase text-[var(--text-muted)] block">

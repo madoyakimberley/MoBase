@@ -9,6 +9,11 @@ import {
   Phone,
   Globe,
   UserCheck,
+  Shield,
+  RefreshCw,
+  FileText,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { ClientDetails, ClientDetailsData } from "./components/ClientDetails";
 import { ChatWall } from "./components/ChatWall";
@@ -36,8 +41,8 @@ export default function ClientsPage() {
   );
   const [activeChatLead, setActiveChatLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [showChatWall, setShowChatWall] = useState<boolean>(true);
 
-  // Fetch real claimed/contacted clients from database
   const loadClaimedClients = async () => {
     setLoading(true);
     try {
@@ -57,7 +62,6 @@ export default function ClientsPage() {
       console.error("Failed to fetch clients from API:", err);
     }
 
-    // Offline cache fallback
     try {
       const cached = localStorage.getItem("mobase_cached_leads");
       if (cached) {
@@ -94,7 +98,6 @@ export default function ClientsPage() {
     localStorage.setItem("mobase_cached_leads", JSON.stringify(updatedList));
   };
 
-  // Convert ClientRecord to Lead for ChatDrawer
   const getActiveLead = (client: ClientRecord): Lead => {
     return {
       id: client.id,
@@ -110,13 +113,11 @@ export default function ClientsPage() {
     } as unknown as Lead;
   };
 
-  // Dynamic metrics calculations
   const totalClients = clients.length;
   const contactedCount = clients.filter((c) => c.status === "CONTACTED").length;
   const claimedCount = clients.filter((c) => c.status === "CLAIMED").length;
   const convertedCount = clients.filter((c) => c.status === "CONVERTED").length;
 
-  // Filter clients dynamically
   const filteredClients = clients.filter((client) => {
     const matchesSearch =
       client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -136,7 +137,8 @@ export default function ClientsPage() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-[var(--border-glass)] pb-6">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-[10px] font-mono tracking-widest uppercase text-[var(--accent-gold)] font-bold">
-            <span>🛡️ DEVELOPER WORKSPACE</span>
+            <Shield className="w-3.5 h-3.5" />
+            <span>DEVELOPER WORKSPACE</span>
             <span>•</span>
             <span>CLIENT DIRECTORY</span>
           </div>
@@ -153,11 +155,12 @@ export default function ClientsPage() {
           onClick={loadClaimedClients}
           className="px-4 py-2.5 rounded-xl bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] font-mono text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2 self-start lg:self-auto"
         >
-          <span>🔄 Sync Database Clients</span>
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Sync Database Clients</span>
         </button>
       </div>
 
-      {/* Dynamic Summary Metrics */}
+      {/* Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
@@ -281,7 +284,7 @@ export default function ClientsPage() {
             </div>
           ) : filteredClients.length === 0 ? (
             <div className="p-12 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
-              <span className="text-3xl">📋</span>
+              <FileText className="w-10 h-10 mx-auto text-[var(--text-muted)]" />
               <p className="text-xs font-mono text-[var(--text-secondary)]">
                 No clients match your filter.
               </p>
@@ -347,10 +350,42 @@ export default function ClientsPage() {
                 client={selectedClient}
                 onUpdateClient={handleUpdateClient}
               />
-              <ChatWall
-                activeLead={getActiveLead(selectedClient)}
-                onOpenChat={(lead) => setActiveChatLead(lead)}
-              />
+
+              {/* Chat Wall Controls Header Bar */}
+              <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between font-mono text-xs">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-[var(--accent-gold)]" />
+                  <span className="font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                    Live Client Chat Stream
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowChatWall((prev) => !prev)}
+                  className="px-3.5 py-1.5 rounded-xl bg-[var(--bg-canvas)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-glass)] hover:border-[var(--accent-gold)] text-[var(--accent-gold)] font-semibold transition-all cursor-pointer flex items-center gap-2"
+                >
+                  {showChatWall ? (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5" />
+                      <span>Hide Chat Wall</span>
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Display Chat Wall</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Conditional Render of Chat Wall */}
+              {showChatWall && (
+                <ChatWall
+                  activeLead={getActiveLead(selectedClient)}
+                  onOpenChat={(lead) => setActiveChatLead(lead)}
+                />
+              )}
             </>
           ) : (
             <div className="p-16 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
