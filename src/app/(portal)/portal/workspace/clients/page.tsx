@@ -18,6 +18,7 @@ import {
 import { ClientDetails, ClientDetailsData } from "./components/ClientDetails";
 import { ChatWall } from "./components/ChatWall";
 import { ChatDrawer } from "../find-jobs/components/ChatDrawer";
+import { TierConfirmation } from "./components/TierConfirmation";
 import { Lead } from "../find-jobs/components/types";
 
 export interface ClientRecord extends ClientDetailsData {
@@ -160,7 +161,7 @@ export default function ClientsPage() {
         </button>
       </div>
 
-      {/* Summary Metrics */}
+      {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
           <div className="flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
@@ -237,7 +238,7 @@ export default function ClientsPage() {
         </div>
       </div>
 
-      {/* Filter Navigation Bar */}
+      {/* Filter Navigation */}
       <div className="p-3 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
@@ -268,7 +269,7 @@ export default function ClientsPage() {
         </div>
       </div>
 
-      {/* Two-Column Layout */}
+      {/* Two-Column Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Client Roster */}
         <div className="lg:col-span-5 space-y-4">
@@ -342,16 +343,29 @@ export default function ClientsPage() {
           )}
         </div>
 
-        {/* Right: Selected Client Details & Live Chat Stream */}
+        {/* Right: Selected Client Details, Local Vesper Engine & Live Chat */}
         <div className="lg:col-span-7 space-y-6">
           {selectedClient ? (
             <>
+              {/* Selected Client Overview */}
               <ClientDetails
                 client={selectedClient}
                 onUpdateClient={handleUpdateClient}
               />
 
-              {/* Chat Wall Controls Header Bar */}
+              {/* Local WebGPU Vesper AI Tier Gate */}
+              <TierConfirmation
+                selectedLead={{
+                  id: selectedClient.id,
+                  name: selectedClient.name,
+                  category: selectedClient.category,
+                  city: selectedClient.city,
+                  reviewsCount: selectedClient.reviewsCount,
+                  hasWebsite: selectedClient.hasWebsite,
+                }}
+              />
+
+              {/* Chat Wall Header Bar */}
               <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex items-center justify-between font-mono text-xs">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-[var(--accent-gold)]" />
@@ -391,8 +405,8 @@ export default function ClientsPage() {
             <div className="p-16 text-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] space-y-3">
               <ShieldCheck className="w-12 h-12 mx-auto text-[var(--accent-gold)] opacity-70" />
               <p className="text-xs font-mono text-[var(--text-secondary)]">
-                Select a client on the left to inspect details and live WhatsApp
-                messages.
+                Select a client on the left to inspect details, execute Vesper
+                audits, and view live messages.
               </p>
             </div>
           )}

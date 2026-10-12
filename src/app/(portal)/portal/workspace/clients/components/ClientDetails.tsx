@@ -14,6 +14,7 @@ export interface ClientDetailsData {
   id: string;
   name: string;
   category?: string;
+  city?: string;
   reviewsCount?: number;
   hasWebsite?: boolean;
   liveUrl?: string;
@@ -94,8 +95,8 @@ export function ClientDetails({ client, onUpdateClient }: ClientDetailsProps) {
               <CheckCircle2 className="w-4 h-4 text-[var(--accent-gold)] shrink-0" />
             </div>
             <p className="text-xs font-mono text-[var(--text-muted)] mt-0.5">
-              Category: {client.category || "Local Business"} • Status:{" "}
-              {client.status || "CLAIMED"}
+              Category: {client.category || "Local Business"} • Location:{" "}
+              {client.city || "Kenya"}
             </p>
           </div>
         </div>

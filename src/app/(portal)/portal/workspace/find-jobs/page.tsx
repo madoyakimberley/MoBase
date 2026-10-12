@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   ShieldAlert,
@@ -12,6 +13,7 @@ import {
   QrCode,
   ChevronDown,
   WifiOff,
+  Sparkles,
 } from "lucide-react";
 
 import { Lead } from "./components/types";
@@ -45,26 +47,25 @@ const PRESET_QUERIES = [
 ];
 
 export default function FindJobsPage() {
+  const router = useRouter();
+
   const [query, setQuery] = useState("salons in Ruiru");
   const [minReviews, setMinReviews] = useState(15);
   const [loading, setLoading] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [visibleCount, setVisibleCount] = useState<number>(3); // Lazy render batching
+  const [visibleCount, setVisibleCount] = useState<number>(3);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
 
-  // WhatsApp QR Code & Session State
   const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [isWhatsAppConnected, setIsWhatsAppConnected] =
     useState<boolean>(false);
 
-  // Secure Chat Drawer State
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
 
-  // Restore cached leads and search parameters on mount
   useEffect(() => {
     try {
       const cached = localStorage.getItem("mobase_cached_leads");
@@ -86,7 +87,6 @@ export default function FindJobsPage() {
     }
   }, []);
 
-  // Sync leads state changes directly to localStorage
   const updateAndCacheLeads = (
     newLeads: Lead[] | ((prev: Lead[]) => Lead[]),
   ) => {
@@ -102,7 +102,6 @@ export default function FindJobsPage() {
     });
   };
 
-  // On-Demand Worker Boot & QR status polling
   const handleOpenQrModal = async () => {
     setShowQrModal(true);
     if (!isWhatsAppConnected && navigator.onLine) {
@@ -147,7 +146,7 @@ export default function FindJobsPage() {
     setLoading(true);
     setError(null);
     setHasScanned(true);
-    setVisibleCount(3); // Reset lazy display queue to 3 cards
+    setVisibleCount(3);
     setIsOfflineMode(!navigator.onLine);
 
     try {
@@ -183,7 +182,6 @@ export default function FindJobsPage() {
       const fetchedLeads = data.leads || [];
       updateAndCacheLeads(fetchedLeads);
     } catch (err: any) {
-      // Fallback to local offline cache if search request fails
       const cached = localStorage.getItem("mobase_cached_leads");
       if (cached) {
         try {
@@ -221,7 +219,12 @@ export default function FindJobsPage() {
           await fetch("/api/dev/leads/claim", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ leadId: lead.id }),
+            body: JSON.stringify({
+              leadId: lead.id,
+              leadName: lead.name,
+              city: lead.city,
+              niche: lead.niche,
+            }),
           });
         } catch (err) {
           console.error("Claiming lead failed on server:", err);
@@ -231,7 +234,9 @@ export default function FindJobsPage() {
   };
 
   const handleToggleClaim = async (lead: Lead) => {
-    const nextStatus = lead.status === "CLAIMED" ? "UNCLAIMED" : "CLAIMED";
+    const isClaiming = lead.status !== "CLAIMED";
+    const nextStatus = isClaiming ? "CLAIMED" : "UNCLAIMED";
+
     updateAndCacheLeads((prev) =>
       prev.map((l) => (l.id === lead.id ? { ...l, status: nextStatus } : l)),
     );
@@ -241,8 +246,14 @@ export default function FindJobsPage() {
         const res = await fetch("/api/dev/leads/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ leadId: lead.id }),
+          body: JSON.stringify({
+            leadId: lead.id,
+            leadName: lead.name,
+            city: lead.city,
+            niche: lead.niche,
+          }),
         });
+
         const data = await res.json().catch(() => ({}));
 
         if (res.ok && data.status) {
@@ -251,6 +262,10 @@ export default function FindJobsPage() {
               l.id === lead.id ? { ...l, status: data.status } : l,
             ),
           );
+
+          if (isClaiming) {
+            router.push(`/portal/workspace/vesper?leadId=${lead.id}`);
+          }
         }
       } catch (err) {
         console.error("Claim failed on server:", err);
@@ -282,8 +297,9 @@ export default function FindJobsPage() {
 
         <div className="relative z-10 max-w-3xl space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-3 py-1 rounded-full text-[10px] font-mono tracking-wider bg-[var(--accent-gold)]/10 text-[var(--accent-gold)] border border-[var(--accent-gold)]/30 uppercase font-semibold">
-              ✨ Lead Discovery Console
+            <span className="px-3 py-1 rounded-full text-[10px] font-mono tracking-wider bg-[var(--accent-gold)]/10 text-[var(--accent-gold)] border border-[var(--accent-gold)]/30 uppercase font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[var(--accent-gold)]" />{" "}
+              Lead Discovery Console
             </span>
             <button
               onClick={handleOpenQrModal}

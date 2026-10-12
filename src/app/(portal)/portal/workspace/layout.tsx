@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { VesperFloatingChat } from "@/components/vesper/VesperFloatingChat";
 import {
   Home,
   Search,
@@ -17,6 +18,7 @@ import {
   Trash2,
   Lock,
   AlertTriangle,
+  Bot,
 } from "lucide-react";
 
 interface DevUser {
@@ -31,6 +33,7 @@ const BASE = "/portal/workspace";
 
 const navTabs = [
   { label: "Overview", href: BASE, icon: Home },
+  { label: "Vesper", href: `${BASE}/vesper`, icon: Bot },
   { label: "Find Jobs", href: `${BASE}/find-jobs`, icon: Search },
   { label: "Active Jobs", href: `${BASE}/active-jobs`, icon: FolderKanban },
   { label: "Clients", href: `${BASE}/clients`, icon: Users },
@@ -145,7 +148,6 @@ export default function WorkspaceLayout({
     setDeleteError("");
 
     try {
-      // 1. Verify password endpoint
       const verifyRes = await fetch("/api/auth/verify-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,7 +159,6 @@ export default function WorkspaceLayout({
         throw new Error(errData.error || "Incorrect password.");
       }
 
-      // 2. Trigger permanent account purge API
       const deleteRes = await fetch(
         `/api/dev/account/delete?userId=${devUser?.id}`,
         { method: "DELETE" },
@@ -168,7 +169,6 @@ export default function WorkspaceLayout({
         throw new Error(errData.error || "Failed to purge account.");
       }
 
-      // 3. Clear local session & redirect to login
       localStorage.removeItem("mobase_dev_user");
       localStorage.clear();
       router.replace("/portal/login");
@@ -186,6 +186,8 @@ export default function WorkspaceLayout({
       </div>
     );
   }
+
+  const isVesperPage = pathname.startsWith(`${BASE}/vesper`);
 
   return (
     <div className="min-h-screen w-full bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-300 relative">
@@ -233,6 +235,7 @@ export default function WorkspaceLayout({
               )}
             </div>
 
+            {/* Navigation Menu */}
             <div className="relative">
               <button
                 onClick={() => setIsNavOpen((prev) => !prev)}
@@ -247,8 +250,21 @@ export default function WorkspaceLayout({
               </button>
 
               {isNavOpen && (
-                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 p-3 rounded-[32px] bg-[var(--bg-surface)]/80 backdrop-blur-xl border border-[var(--border-subtle)] shadow-2xl animate-fadeIn min-w-[76px]">
-                  <div className="flex flex-col items-center gap-4 py-2 w-full">
+                <div className="absolute top-full mt-3 right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 z-50 p-4 rounded-[28px] bg-[var(--bg-surface)]/90 backdrop-blur-2xl border border-[var(--border-subtle)] shadow-2xl animate-fadeIn min-w-[300px] sm:min-w-[360px]">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-[var(--border-glass)] px-1">
+                    <span className="text-[10px] font-mono font-bold tracking-widest uppercase text-[var(--accent-gold)]">
+                      DEV WORKSPACE DIRECTORY
+                    </span>
+                    <button
+                      onClick={() => setIsNavOpen(false)}
+                      aria-label="Close menu"
+                      className="p-1 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full">
                     {navTabs.map((tab) => {
                       const Icon = tab.icon;
                       const isActive =
@@ -261,36 +277,28 @@ export default function WorkspaceLayout({
                           key={tab.href}
                           href={tab.href}
                           onClick={() => setIsNavOpen(false)}
-                          className={`flex flex-col items-center gap-1 group w-full px-2 py-1.5 rounded-2xl transition-all duration-150 ${
+                          className={`flex flex-col items-center justify-center gap-2 p-3 rounded-2xl border transition-all duration-200 text-center ${
                             isActive
-                              ? "text-[var(--accent-gold)] font-medium"
-                              : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                              ? "bg-[var(--accent-gold)]/15 border-[var(--accent-gold)] text-[var(--accent-gold)] font-bold shadow-md"
+                              : "bg-[var(--bg-canvas)]/60 border-[var(--border-glass)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface-elevated)]"
                           }`}
                         >
                           <div
-                            className={`p-2 rounded-full transition-all duration-200 ${
+                            className={`p-2 rounded-xl transition-all duration-200 ${
                               isActive
-                                ? "bg-[var(--accent-gold)]/15 text-[var(--accent-gold)]"
-                                : "group-hover:bg-[var(--bg-surface-elevated)]"
+                                ? "bg-[var(--accent-gold)] text-[var(--bg-canvas)]"
+                                : "bg-[var(--bg-surface-elevated)] text-[var(--text-muted)]"
                             }`}
                           >
-                            <Icon className="w-4 h-4 stroke-[1.8]" />
+                            <Icon className="w-4 h-4" />
                           </div>
-                          <span className="text-[10px] font-mono tracking-tight text-center leading-tight">
+                          <span className="text-[11px] font-mono tracking-tight leading-tight">
                             {tab.label}
                           </span>
                         </Link>
                       );
                     })}
                   </div>
-
-                  <button
-                    onClick={() => setIsNavOpen(false)}
-                    aria-label="Close menu"
-                    className="p-2 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-elevated)] transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
                 </div>
               )}
             </div>
@@ -311,7 +319,6 @@ export default function WorkspaceLayout({
               </div>
             </div>
 
-            {/* Delete Account Modal Trigger */}
             <button
               onClick={() => setIsDeleteModalOpen(true)}
               title="Delete Account"
@@ -336,7 +343,10 @@ export default function WorkspaceLayout({
         {children}
       </main>
 
-      {/* Delete Account Confirmation Modal */}
+      {/* Persistent Floating Vesper Bot on all pages except full Vesper Workspace */}
+      {!isVesperPage && <VesperFloatingChat />}
+
+      {/* Delete Account Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md p-6 rounded-3xl bg-[var(--bg-surface)] border border-red-500/30 space-y-5 shadow-2xl">
@@ -357,7 +367,6 @@ export default function WorkspaceLayout({
             <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
               This will permanently purge your workspace, lead claims, active
               client dossiers, and historical records from MoBase systems.
-              Please enter your password to authorize this action.
             </p>
 
             {deleteError && (

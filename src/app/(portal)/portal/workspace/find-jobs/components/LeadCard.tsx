@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   MapPin,
@@ -11,6 +12,8 @@ import {
   Bookmark,
   ExternalLink,
   Trash2,
+  Bot,
+  Clock,
 } from "lucide-react";
 import { Lead } from "./types";
 
@@ -31,6 +34,13 @@ export function LeadCard({
   onCopyPhone,
   onDismissLead,
 }: LeadCardProps) {
+  const router = useRouter();
+
+  const handleLaunchVesper = () => {
+    // Navigate straight to Vesper Workspace for this specific lead
+    router.push(`/portal/workspace/vesper?leadId=${lead.id}`);
+  };
+
   return (
     <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--accent-gold)]/60 transition-all flex flex-col justify-between group shadow-sm hover:shadow-md relative">
       <div className="space-y-4">
@@ -52,6 +62,13 @@ export function LeadCard({
             >
               {lead.status}
             </span>
+
+            {/* Prototype Deadline Badge if Claimed */}
+            {lead.status === "CLAIMED" && (
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-[var(--accent-gold)]/15 text-[var(--accent-gold)] border border-[var(--accent-gold)]/30 flex items-center gap-1 font-bold">
+                <Clock className="w-3 h-3" /> 48H TIMER
+              </span>
+            )}
           </div>
 
           <span className="font-mono text-xs text-[var(--text-secondary)]">
@@ -109,22 +126,34 @@ export function LeadCard({
 
       {/* Card Actions */}
       <div className="pt-5 mt-5 border-t border-[var(--border-glass)] space-y-2">
-        <button
-          onClick={() => onStartChat(lead)}
-          className="w-full py-2.5 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] text-xs font-mono font-medium rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>
-            {lead.status === "CONTACTED"
-              ? "Continue Proxy Chat"
-              : "Start Proxy Chat"}
-          </span>
-        </button>
+        {lead.status === "CLAIMED" ? (
+          /* Primary Launch Vesper AI Strategy Button */
+          <button
+            onClick={handleLaunchVesper}
+            className="w-full py-2.5 bg-[var(--accent-gold)] hover:bg-[var(--accent-gold-hover)] text-[var(--bg-canvas)] text-xs font-mono font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
+          >
+            <Bot className="w-4 h-4" />
+            <span>Launch Vesper AI Strategy</span>
+          </button>
+        ) : (
+          /* Proxy Chat Button */
+          <button
+            onClick={() => onStartChat(lead)}
+            className="w-full py-2.5 bg-[var(--bg-surface-elevated)] hover:bg-[var(--accent-gold)] text-[var(--text-primary)] hover:text-[var(--bg-canvas)] border border-[var(--border-glass)] text-xs font-mono font-medium rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Start Proxy Chat</span>
+          </button>
+        )}
 
         <div className="grid grid-cols-3 gap-2 pt-1">
           <button
             onClick={() => onToggleClaim(lead)}
-            title={lead.status === "CLAIMED" ? "Unclaim Lead" : "Claim Lead"}
+            title={
+              lead.status === "CLAIMED"
+                ? "Unclaim Lead"
+                : "Claim & Activate Vesper"
+            }
             className={`py-2 px-2 border rounded-xl text-[11px] font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
               lead.status === "CLAIMED"
                 ? "bg-amber-500/10 border-amber-500/40 text-amber-400"

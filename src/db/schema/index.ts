@@ -129,6 +129,8 @@ export const leadAssignments = mysqlTable(
     leadId: varchar("lead_id", { length: 36 }).notNull(),
     developerId: varchar("developer_id", { length: 36 }).notNull(),
     claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+    prototypeDeadline: timestamp("prototype_deadline"),
+    assignedTier: varchar("assigned_tier", { length: 64 }),
   },
   (table) => ({
     leadDevIdx: uniqueIndex("idx_lead_assignments_unique").on(

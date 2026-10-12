@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
+    "@mlc-ai/web-llm": "^0.2.86",
     "@tailwindcss/vite": "^4.3.3",
     "@tidbcloud/serverless": "^0.3.0",
     "@upstash/redis": "^1.39.0",
@@ -24,8 +25,10 @@
     "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
+    "dexie": "^4.4.6",
     "dotenv": "^18.0.6",
     "drizzle-orm": "^0.45.3",
+    "framer-motion": "^14.1.0",
     "ioredis": "^6.0.0",
     "lucide-react": "^1.53.0",
     "mysql2": "^3.24.5",

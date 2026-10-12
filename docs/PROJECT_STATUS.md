@@ -1,32 +1,31 @@
 # Project Status — MoBase Lead Discovery Console
 
-## Current Phase: Stress Testing & Offline Resilience Verification
+## Current Phase: Vesper AI Executive Co-Pilot & Workspace Intelligence
 
 ### Milestone Completion Summary
 
-| Category                | Status       | Details                                                                                                       |
-| :---------------------- | :----------- | :------------------------------------------------------------------------------------------------------------ |
-| **API Hardening**       | ✅ Completed | Zero-trust verification, origin validation, RBAC enforcement (`DEVELOPER` / `SUPER_ADMIN`), redacted logging. |
-| **Worker Architecture** | ✅ Completed | Single-instance WhatsApp worker spawned via process isolation with `.whatsapp-worker.lock` protection.        |
-| **PWA Configuration**   | ✅ Completed | Web app manifest active, Workbox asset pre-caching configured, viewport/status bar settings linked.           |
-| **Offline Resilience**  | ✅ Completed | Local session fallback, cached lead searches, optimistic chat drawer queueing with auto-flushing.             |
-| **Client UI Shell**     | ✅ Completed | Connectivity badges (`Wifi`/`WifiOff`), lazy card rendering, glassmorphic floating navigation.                |
+| Category                    | Status         | Details                                                                                                                  |
+| :-------------------------- | :------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| **DB Connection Pool**      | ✅ Completed   | Configured `mysql2` pool with `enableKeepAlive` & `idleTimeout` to resolve `ETIMEDOUT` errors in TiDB Cloud[cite: 24].   |
+| **Worker Infrastructure**   | ✅ Completed   | Single background process with embedded HTTP health server and non-overlapping outbox queue loop[cite: 24].              |
+| **Serverless Clean Split**  | ✅ Completed   | Vercel API routes decoupled from Puppeteer/Browserless; strictly read status from shared TiDB state[cite: 24].           |
+| **Dynamic Client UI**       | ✅ Completed   | Replaced static mockups with live database metrics, outbox messaging wall, and Lucide React iconography[cite: 24].       |
+| **Vesper Session Identity** | ✅ Completed   | Created `/api/vesper/chat` to resolve real developer identity (`fullName`/`username`) securely from database schema.     |
+| **Conversational Co-Pilot** | 🔄 In Progress | Transitioned Vesper from template-driven responses to dynamic multi-turn WebGPU inference with zero robotic disclaimers. |
+| **Offline Resilience**      | ✅ Completed   | Local session fallback, cached lead searches, optimistic chat drawer queueing with auto-flushing[cite: 24].              |
 
 ---
 
-## Next Steps: Stress Testing Agenda
+## Technical Roadmap: Vesper Proactive Engine & Architecture
 
-1. **Service Worker Asset Verification**:
-   - Verify that static routes and asset bundles cache properly when running production builds (`npm run build && npm run start`).
-   - Audit app installation capability on desktop/mobile Chrome & Safari.
+1. **Vesper DB & Redis Session Persistence**:
+   - Integrate Redis for sub-millisecond conversation memory and client interaction history across developer sessions.
+   - Persist client-specific design specifications, PRDs, and outreach logs into readable IndexedDB (`vesperLocalDb`) and database records.
 
-2. **Network Interruption & Queue Flushing Simulation**:
-   - Test search execution under artificial offline conditions (DevTools network throttling/offline mode).
-   - Compose outreach messages while offline and verify automatic queue dispatch upon reconnecting.
+2. **Centralized Action & Prompt Pipeline**:
+   - Unify all Vesper modules (Audit, Proposal, Outreach, Floating Chat) under a single `useVesperWebLLM` server action hook to prevent component-level prompt drift.
+   - Inject live system time, timezone metadata (EAT/UTC/EST), and developer profile context into every inference stream.
 
-3. **Concurrency & Worker Process Stress Testing**:
-   - Attempt duplicate `POST /api/dev/whatsapp/start` calls simultaneously to verify `.whatsapp-worker.lock` prevents process duplication.
-   - Test worker stability under simulated high message volume.
-
-4. **Active Jobs Workspace Integration** _(Pending UI update)_:
-   - Finalize `src/app/portal/workspace/active-jobs/page.tsx` for tracking claimed job conversions and client stage history.
+3. **Render Cloud Service & WhatsApp Worker Verification**:
+   - Verify Render Web Service deployment running `npx tsx server/whatsapp-worker.ts`[cite: 24].
+   - Link `https://<render-service>.onrender.com/health` to external keep-alive cron triggers[cite: 24].
